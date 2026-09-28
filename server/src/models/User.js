@@ -66,6 +66,13 @@ const userSchema = new mongoose.Schema(
         },
       },
     ],
+    // Blocked users
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,

@@ -30,6 +30,8 @@ const registerChatHandlers = (io, socket) => {
         fileUrl = '',
         fileName = '',
         fileSize = 0,
+        callDuration = 0,
+        callStatus = '',
         tempId,
       } = data;
 
@@ -38,9 +40,22 @@ const registerChatHandlers = (io, socket) => {
         return;
       }
 
-      if (!content.trim() && !fileUrl) {
+      if (!content.trim() && !fileUrl && messageType !== 'call') {
         if (callback) callback({ error: 'Message content or attachment is required' });
         return;
+      }
+
+      // Check if blocked in 1-to-1
+      if (receiverId) {
+        const receiver = await User.findById(receiverId);
+        const sender = await User.findById(senderId);
+        const isBlocked =
+          receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
+          sender?.blockedUsers?.some((id) => String(id) === String(receiverId));
+        if (isBlocked) {
+          if (callback) callback({ error: 'Cannot send message to this user' });
+          return;
+        }
       }
 
       // Group message flow - nested inside Group document
@@ -52,6 +67,8 @@ const registerChatHandlers = (io, socket) => {
           fileUrl,
           fileName,
           fileSize,
+          callDuration,
+          callStatus,
           status: 'delivered',
           timestamp: new Date(),
         };
@@ -95,6 +112,8 @@ const registerChatHandlers = (io, socket) => {
         fileUrl,
         fileName,
         fileSize,
+        callDuration,
+        callStatus,
         status: initialStatus,
         timestamp: new Date(),
       };

@@ -1,7 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import {
+  Mic,
+  MicOff,
+  PhoneOff,
+  Video,
+  VideoOff,
+  RefreshCw,
+  FlipHorizontal,
+} from 'lucide-react';
 import { CallState } from '@/types';
 import { Avatar } from '../ui/Avatar';
 
@@ -12,8 +20,12 @@ interface ActiveCallModalProps {
   duration: number;
   isMuted: boolean;
   isCameraOff: boolean;
+  isMirrored?: boolean;
+  facingMode?: 'user' | 'environment';
   onToggleMute: () => void;
   onToggleCamera: () => void;
+  onToggleMirror?: () => void;
+  onSwitchCamera?: () => void;
   onEndCall: () => void;
   remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
@@ -27,8 +39,12 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   duration,
   isMuted,
   isCameraOff,
+  isMirrored = false,
+  facingMode = 'user',
   onToggleMute,
   onToggleCamera,
+  onToggleMirror,
+  onSwitchCamera,
   onEndCall,
   remoteAudioRef,
   localVideoRef,
@@ -61,7 +77,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   const isVideo = callType === 'video';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       {/* Hidden audio element receiving remote stream */}
       <audio
         ref={remoteAudioRef as any}
@@ -88,7 +104,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 
             {/* If remote video not yet connected, show placeholder avatar */}
             {callStatus === 'calling' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-950/80 backdrop-blur-sm">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-950/80 backdrop-blur-sm z-10">
                 <Avatar name={peerUser?.name || 'User'} avatar={peerUser?.avatar} size="xl" />
                 <h3 className="text-xl font-semibold text-white mt-4">{peerUser?.name}</h3>
                 <p className="text-sm text-emerald-400 animate-pulse mt-1">Calling Video...</p>
@@ -96,13 +112,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
             )}
 
             {/* Local Video Stream (Picture-in-Picture floating) */}
-            <div className="absolute top-4 right-4 w-28 h-40 sm:w-36 sm:h-48 bg-neutral-900 rounded-2xl overflow-hidden border-2 border-emerald-500/80 shadow-2xl z-20">
+            <div className="absolute top-4 right-4 w-32 h-44 sm:w-40 sm:h-52 bg-neutral-900 rounded-2xl overflow-hidden border-2 border-emerald-500/80 shadow-2xl z-20">
               <video
                 ref={localVideoRef as any}
                 autoPlay
                 playsInline
                 muted
-                className={`w-full h-full object-cover ${isCameraOff ? 'hidden' : 'block'}`}
+                style={{ transform: isMirrored ? 'scaleX(-1)' : 'scaleX(1)' }}
+                className={`w-full h-full object-cover transition-transform duration-300 ${
+                  isCameraOff ? 'hidden' : 'block'
+                }`}
               />
               {isCameraOff && (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-900 text-neutral-400 text-xs">
@@ -110,10 +129,30 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
                   <span>Camera off</span>
                 </div>
               )}
+
+              {/* In-PiP quick actions */}
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-auto">
+                <button
+                  onClick={onToggleMirror}
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-[10px] backdrop-blur-sm transition-colors flex items-center gap-1"
+                  title={isMirrored ? 'Unmirror View (Natural Real Look)' : 'Mirror View'}
+                >
+                  <FlipHorizontal className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{isMirrored ? 'Mirrored' : 'Natural'}</span>
+                </button>
+
+                <button
+                  onClick={onSwitchCamera}
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm transition-colors"
+                  title="Switch Front / Back Camera"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* In-Video Header Info */}
-            <div className="absolute top-4 left-4 z-20 bg-black/50 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-2 border border-white/10">
+            <div className="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-2 border border-white/10">
               <span className="font-semibold text-white text-xs">{peerUser?.name}</span>
               <span className="text-neutral-400 text-xs">•</span>
               <span className="text-emerald-400 font-mono text-xs font-semibold">
@@ -167,7 +206,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         )}
 
         {/* CONTROLS BAR */}
-        <div className="p-4 bg-neutral-950/90 border-t border-neutral-800 flex items-center justify-center gap-6">
+        <div className="p-4 bg-neutral-950/95 border-t border-neutral-800 flex items-center justify-center gap-4 sm:gap-6">
           {/* Mute toggle */}
           <button
             onClick={onToggleMute}
@@ -183,17 +222,28 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 
           {/* Camera toggle (available in video calls) */}
           {isVideo && (
-            <button
-              onClick={onToggleCamera}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                isCameraOff
-                  ? 'bg-amber-600/20 border border-amber-500 text-amber-400'
-                  : 'bg-neutral-800 border border-neutral-700 text-neutral-200 hover:bg-neutral-700'
-              }`}
-              title={isCameraOff ? 'Turn camera on' : 'Turn camera off'}
-            >
-              {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-            </button>
+            <>
+              <button
+                onClick={onToggleCamera}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                  isCameraOff
+                    ? 'bg-amber-600/20 border border-amber-500 text-amber-400'
+                    : 'bg-neutral-800 border border-neutral-700 text-neutral-200 hover:bg-neutral-700'
+                }`}
+                title={isCameraOff ? 'Turn camera on' : 'Turn camera off'}
+              >
+                {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+              </button>
+
+              {/* Switch Camera (Front / Back) */}
+              <button
+                onClick={onSwitchCamera}
+                className="w-12 h-12 rounded-full bg-neutral-800 border border-neutral-700 text-neutral-200 hover:bg-neutral-700 flex items-center justify-center transition-all"
+                title={`Switch Camera (Currently ${facingMode === 'user' ? 'Front' : 'Back'})`}
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </>
           )}
 
           {/* End Call */}

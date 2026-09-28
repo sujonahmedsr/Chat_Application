@@ -38,6 +38,47 @@ export default function ChatDashboard() {
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
+  // Automatic Call Log in Conversation Handler
+  const handleCallEndedLog = useCallback(
+    (callLog: {
+      peerId: string;
+      callType: 'audio' | 'video';
+      duration: number;
+      status: 'completed' | 'missed' | 'rejected';
+    }) => {
+      if (!socket || !currentUser) return;
+
+      const payload = {
+        receiverId: callLog.peerId,
+        content: callLog.callType === 'video' ? 'Video call' : 'Voice call',
+        messageType: 'call',
+        callDuration: callLog.duration,
+        callStatus: callLog.status,
+        tempId: `call_${Date.now()}`,
+      };
+
+      const optimisticMessage: Message = {
+        id: payload.tempId,
+        senderId: currentUser.id,
+        receiverId: callLog.peerId,
+        content: payload.content,
+        messageType: 'call',
+        callDuration: callLog.duration,
+        callStatus: callLog.status,
+        status: 'delivered',
+        timestamp: new Date().toISOString(),
+        sender: currentUser,
+      };
+
+      if (selectedUser?.id === callLog.peerId) {
+        setMessages((prev) => [...prev, optimisticMessage]);
+      }
+
+      socket.emit('message:send', payload);
+    },
+    [socket, currentUser, selectedUser?.id]
+  );
+
   // WebRTC hook
   const {
     callStatus,
@@ -47,6 +88,8 @@ export default function ChatDashboard() {
     duration,
     isMuted,
     isCameraOff,
+    isMirrored,
+    facingMode,
     remoteAudioRef,
     localVideoRef,
     remoteVideoRef,
@@ -56,7 +99,9 @@ export default function ChatDashboard() {
     endCall,
     toggleMute,
     toggleCamera,
-  } = useWebRTC();
+    toggleMirror,
+    switchCamera,
+  } = useWebRTC({ onCallEndedLog: handleCallEndedLog });
 
   // Redirect to login if unauthenticated
   useEffect(() => {
@@ -181,7 +226,7 @@ export default function ChatDashboard() {
     }
   };
 
-  // Send message (handles text, photos, files, and voice notes)
+  // Send message
   const handleSendMessage = (content: string, attachment?: any) => {
     if (!currentUser || !socket) return;
     if (!selectedUser && !selectedGroup) return;
@@ -254,15 +299,19 @@ export default function ChatDashboard() {
 
       if (selectedUser && message.senderId === selectedUser.id) {
         setMessages((prev) => [...prev, message]);
-        triggerNotification(`Shofi Chat: ${senderName}`, {
-          body: message.content || 'Sent an attachment',
-        });
+        if (message.messageType !== 'call') {
+          triggerNotification(`Shofi Chat: ${senderName}`, {
+            body: message.content || 'Voice Note',
+          });
+        }
         socket.emit('message:read', { senderId: selectedUser.id });
         apiRequest(`/messages/${selectedUser.id}/read`, { method: 'PUT' }).catch(() => {});
       } else {
-        triggerNotification(`Shofi Chat: ${senderName}`, {
-          body: message.content || 'Sent an attachment',
-        });
+        if (message.messageType !== 'call') {
+          triggerNotification(`Shofi Chat: ${senderName}`, {
+            body: message.content || 'Voice Note',
+          });
+        }
         setUsers((prev) =>
           prev.map((u) => {
             if (u.id === message.senderId) {
@@ -290,11 +339,11 @@ export default function ChatDashboard() {
           return [...prev, message];
         });
         triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: message.content || 'Sent an attachment',
+          body: message.content || 'Voice note',
         });
       } else {
         triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: message.content || 'Sent an attachment',
+          body: message.content || 'Voice note',
         });
         setGroups((prev) =>
           prev.map((g) =>
@@ -317,6 +366,20 @@ export default function ChatDashboard() {
       triggerNotification('Shofi Chat: Request Accepted', {
         body: `${data.friend.name} accepted your friend request!`,
       });
+    };
+
+    const handleUnfriended = ({ userId }: { userId: string }) => {
+      fetchFriends();
+      if (selectedUser?.id === userId) {
+        setSelectedUser(null);
+      }
+    };
+
+    const handleBlocked = ({ userId }: { userId: string }) => {
+      fetchFriends();
+      if (selectedUser?.id === userId) {
+        setSelectedUser(null);
+      }
     };
 
     // Delivery confirmation
@@ -371,6 +434,8 @@ export default function ChatDashboard() {
     socket.on('group:message:receive', handleReceiveGroupMessage);
     socket.on('friend:request:received', handleFriendRequestReceived);
     socket.on('friend:request:accepted', handleFriendRequestAccepted);
+    socket.on('friend:unfriended', handleUnfriended);
+    socket.on('friend:blocked', handleBlocked);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('message:read', handleMessageRead);
     socket.on('typing:start', handleRemoteTypingStart);
@@ -383,6 +448,8 @@ export default function ChatDashboard() {
       socket.off('group:message:receive', handleReceiveGroupMessage);
       socket.off('friend:request:received', handleFriendRequestReceived);
       socket.off('friend:request:accepted', handleFriendRequestAccepted);
+      socket.off('friend:unfriended', handleUnfriended);
+      socket.off('friend:blocked', handleBlocked);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('message:read', handleMessageRead);
       socket.off('typing:start', handleRemoteTypingStart);
@@ -436,6 +503,10 @@ export default function ChatDashboard() {
           onTypingStop={handleTypingStop}
           onStartCall={(target, type) => startCall(target, type)}
           onBack={() => setIsMobileChatOpen(false)}
+          onFriendUpdated={() => {
+            fetchFriends();
+            setSelectedUser(null);
+          }}
         />
       </div>
 
@@ -454,8 +525,12 @@ export default function ChatDashboard() {
         duration={duration}
         isMuted={isMuted}
         isCameraOff={isCameraOff}
+        isMirrored={isMirrored}
+        facingMode={facingMode}
         onToggleMute={toggleMute}
         onToggleCamera={toggleCamera}
+        onToggleMirror={toggleMirror}
+        onSwitchCamera={switchCamera}
         onEndCall={endCall}
         remoteAudioRef={remoteAudioRef}
         localVideoRef={localVideoRef}

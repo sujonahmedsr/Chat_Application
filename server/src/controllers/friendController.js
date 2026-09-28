@@ -15,7 +15,9 @@ const getFriends = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const friends = currentUser.friends || [];
+    const blockedIds = (currentUser.blockedUsers || []).map(String);
+    const rawFriends = currentUser.friends || [];
+    const friends = rawFriends.filter((f) => !blockedIds.includes(String(f._id)));
 
     // Enrich with live presence and conversation preview
     const enrichedFriends = await Promise.all(
@@ -246,6 +248,96 @@ const rejectFriendRequest = async (req, res, next) => {
   }
 };
 
+// Unfriend a user
+const unfriendUser = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const targetUserId = req.params.userId;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $pull: { friends: targetUserId },
+    });
+
+    await User.findByIdAndUpdate(targetUserId, {
+      $pull: { friends: currentUserId },
+    });
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${targetUserId}`).emit('friend:unfriended', {
+        userId: String(currentUserId),
+      });
+    } catch (e) {}
+
+    return res.status(200).json({ success: true, message: 'Friend removed successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Block a user
+const blockUser = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const targetUserId = req.params.userId;
+
+    if (String(currentUserId) === String(targetUserId)) {
+      return res.status(400).json({ message: 'Cannot block yourself' });
+    }
+
+    // Add to blockedUsers and remove from friends
+    await User.findByIdAndUpdate(currentUserId, {
+      $addToSet: { blockedUsers: targetUserId },
+      $pull: { friends: targetUserId },
+    });
+
+    await User.findByIdAndUpdate(targetUserId, {
+      $pull: { friends: currentUserId },
+    });
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${targetUserId}`).emit('friend:blocked', {
+        userId: String(currentUserId),
+      });
+    } catch (e) {}
+
+    return res.status(200).json({ success: true, message: 'User blocked' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Unblock a user
+const unblockUser = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const targetUserId = req.params.userId;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $pull: { blockedUsers: targetUserId },
+    });
+
+    return res.status(200).json({ success: true, message: 'User unblocked' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get list of blocked users
+const getBlockedUsers = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).populate(
+      'blockedUsers',
+      'name email avatar isOnline lastSeen'
+    );
+
+    return res.status(200).json({ blockedUsers: user.blockedUsers || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getFriends,
   getPendingRequests,
@@ -253,4 +345,8 @@ module.exports = {
   sendFriendRequest,
   acceptFriendRequest,
   rejectFriendRequest,
+  unfriendUser,
+  blockUser,
+  unblockUser,
+  getBlockedUsers,
 };

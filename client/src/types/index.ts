@@ -29,10 +29,12 @@ export interface Message {
   receiverId?: string;
   groupId?: string;
   content: string;
-  messageType?: 'text' | 'image' | 'file' | 'audio';
+  messageType?: 'text' | 'image' | 'file' | 'audio' | 'call';
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
+  callDuration?: number;
+  callStatus?: string;
   status: 'sent' | 'delivered' | 'read';
   timestamp: string;
   sender?: User;

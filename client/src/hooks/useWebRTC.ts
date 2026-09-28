@@ -13,7 +13,16 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
-export const useWebRTC = () => {
+interface UseWebRTCOptions {
+  onCallEndedLog?: (callLog: {
+    peerId: string;
+    callType: 'audio' | 'video';
+    duration: number;
+    status: 'completed' | 'missed' | 'rejected';
+  }) => void;
+}
+
+export const useWebRTC = (options?: UseWebRTCOptions) => {
   const { socket } = useSocket();
   const [callStatus, setCallStatus] = useState<CallState>('idle');
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
@@ -21,6 +30,8 @@ export const useWebRTC = () => {
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isCameraOff, setIsCameraOff] = useState<boolean>(false);
+  const [isMirrored, setIsMirrored] = useState<boolean>(false); // default: false (natural unmirrored view)
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [duration, setDuration] = useState<number>(0);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -35,6 +46,11 @@ export const useWebRTC = () => {
   const stopSoundRef = useRef<(() => void) | null>(null);
   const targetUserIdRef = useRef<string | null>(null);
   const callTypeRef = useRef<'audio' | 'video'>('audio');
+  const durationRef = useRef<number>(0);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   // Synchronize stream with video elements whenever streams update
   useEffect(() => {
@@ -105,7 +121,7 @@ export const useWebRTC = () => {
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcRef.current = pc;
 
-      // Handle ICE candidates
+      // Send local ICE candidates to remote peer via socket
       pc.onicecandidate = (event) => {
         if (event.candidate && socket) {
           socket.emit('call:ice-candidate', {
@@ -115,30 +131,23 @@ export const useWebRTC = () => {
         }
       };
 
-      // Handle incoming remote media stream
+      // Receive remote stream
       pc.ontrack = (event) => {
-        console.log('[WebRTC] Received remote stream:', event.streams);
-        if (event.streams && event.streams[0]) {
-          const stream = event.streams[0];
-          setRemoteStream(stream);
+        const stream = event.streams[0];
+        setRemoteStream(stream);
 
+        if (callTypeRef.current === 'video') {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = stream;
-            remoteVideoRef.current.play().catch(console.warn);
           }
-
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = stream;
-            remoteAudioRef.current.play().catch(console.warn);
-          }
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = stream;
         }
       };
 
-      // Handle connection state changes
       pc.onconnectionstatechange = () => {
-        console.log('[WebRTC] Connection state:', pc.connectionState);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          sounds.playCallEndSound();
           cleanupCall();
         }
       };
@@ -165,29 +174,28 @@ export const useWebRTC = () => {
 
         stopSoundRef.current = sounds.playOutgoingRingtone();
 
-        // 1. Get user media (mic + camera if video call)
+        // Get user media
         const constraints = {
           audio: true,
-          video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+          video:
+            type === 'video'
+              ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+              : false,
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         localStreamRef.current = stream;
         setLocalStream(stream);
 
-        // 2. Create peer connection
         const pc = createPeerConnection(targetUser.id);
 
-        // 3. Add tracks to peer connection
         stream.getTracks().forEach((track) => {
           pc.addTrack(track, stream);
         });
 
-        // 4. Create and set local offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // 5. Emit call:start to server
         socket.emit('call:start', {
           to: targetUser.id,
           offer,
@@ -227,28 +235,26 @@ export const useWebRTC = () => {
       });
       targetUserIdRef.current = incomingCall.from;
 
-      // 1. Get media
       const constraints = {
         audio: true,
-        video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+        video:
+          type === 'video'
+            ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+            : false,
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      // 2. Create peer connection
       const pc = createPeerConnection(incomingCall.from);
 
-      // 3. Add tracks
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
-      // 4. Set remote description with offer
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
 
-      // 5. Add any queued ICE candidates
       while (pendingCandidatesRef.current.length > 0) {
         const candidate = pendingCandidatesRef.current.shift();
         if (candidate) {
@@ -256,17 +262,14 @@ export const useWebRTC = () => {
         }
       }
 
-      // 6. Create SDP answer and set local description
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // 7. Emit call:answer
       socket.emit('call:answer', {
         to: incomingCall.from,
         answer,
       });
 
-      // Start call duration timer
       durationTimerRef.current = setInterval(() => {
         setDuration((prev) => prev + 1);
       }, 1000);
@@ -283,29 +286,47 @@ export const useWebRTC = () => {
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
+    const callerId = incomingCall?.from;
     if (socket && incomingCall) {
       socket.emit('call:rejected', {
         to: incomingCall.from,
         callType: incomingCall.callType,
       });
     }
-    sounds.playCallEndSound();
-    cleanupCall();
-  }, [socket, incomingCall, cleanupCall]);
-
-  // End active call or cancel outgoing call
-  const endCall = useCallback(() => {
-    const targetId = targetUserIdRef.current || incomingCall?.from || peerUser?.id;
-    if (socket && targetId) {
-      socket.emit('call:ended', {
-        to: targetId,
-        duration,
+    if (callerId && options?.onCallEndedLog) {
+      options.onCallEndedLog({
+        peerId: callerId,
         callType: callTypeRef.current,
+        duration: 0,
+        status: 'rejected',
       });
     }
     sounds.playCallEndSound();
     cleanupCall();
-  }, [socket, incomingCall, peerUser, duration, cleanupCall]);
+  }, [socket, incomingCall, options, cleanupCall]);
+
+  // End active call or cancel outgoing call
+  const endCall = useCallback(() => {
+    const targetId = targetUserIdRef.current || incomingCall?.from || peerUser?.id;
+    const finalDuration = durationRef.current;
+    if (socket && targetId) {
+      socket.emit('call:ended', {
+        to: targetId,
+        duration: finalDuration,
+        callType: callTypeRef.current,
+      });
+    }
+    if (targetId && options?.onCallEndedLog) {
+      options.onCallEndedLog({
+        peerId: targetId,
+        callType: callTypeRef.current,
+        duration: finalDuration,
+        status: finalDuration > 0 ? 'completed' : 'missed',
+      });
+    }
+    sounds.playCallEndSound();
+    cleanupCall();
+  }, [socket, incomingCall, peerUser, options, cleanupCall]);
 
   // Toggle microphone mute/unmute
   const toggleMute = useCallback(() => {
@@ -331,11 +352,61 @@ export const useWebRTC = () => {
     }
   }, [isCameraOff]);
 
+  // Toggle camera mirroring (natural vs mirror)
+  const toggleMirror = useCallback(() => {
+    setIsMirrored((prev) => !prev);
+  }, []);
+
+  // Switch between front and back camera (facingMode: user vs environment)
+  const switchCamera = useCallback(async () => {
+    if (!localStreamRef.current || callTypeRef.current !== 'video') return;
+    const nextMode = facingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: nextMode } },
+          audio: false,
+        });
+      } catch {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextMode },
+          audio: false,
+        });
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (newVideoTrack) {
+        if (pcRef.current) {
+          const senders = pcRef.current.getSenders();
+          const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+          if (videoSender) {
+            await videoSender.replaceTrack(newVideoTrack);
+          }
+        }
+
+        const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
+        if (oldVideoTrack) oldVideoTrack.stop();
+
+        localStreamRef.current.removeTrack(oldVideoTrack);
+        localStreamRef.current.addTrack(newVideoTrack);
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current;
+        }
+
+        setFacingMode(nextMode);
+      }
+    } catch (err) {
+      console.error('Failed to switch camera:', err);
+    }
+  }, [facingMode]);
+
   // Socket event listeners
   useEffect(() => {
     if (!socket) return;
 
-    // Incoming call received
     const handleIncomingCall = (data: IncomingCallData) => {
       console.log(`[WebRTC] Incoming ${data.callType || 'audio'} call from:`, data.callerName);
       if (callStatus !== 'idle') {
@@ -357,7 +428,6 @@ export const useWebRTC = () => {
       stopSoundRef.current = sounds.playIncomingRingtone();
     };
 
-    // Caller receives SDP answer from callee
     const handleCallAnswer = async ({ from, answer }: { from: string; answer: RTCSessionDescriptionInit }) => {
       console.log('[WebRTC] Received call:answer from:', from);
       if (stopSoundRef.current) {
@@ -383,7 +453,6 @@ export const useWebRTC = () => {
       }
     };
 
-    // ICE candidate exchange
     const handleIceCandidate = async ({ from, candidate }: { from: string; candidate: RTCIceCandidateInit }) => {
       if (pcRef.current && pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
         await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
@@ -426,6 +495,8 @@ export const useWebRTC = () => {
     incomingCall,
     isMuted,
     isCameraOff,
+    isMirrored,
+    facingMode,
     duration,
     localStream,
     remoteStream,
@@ -438,5 +509,7 @@ export const useWebRTC = () => {
     endCall,
     toggleMute,
     toggleCamera,
+    toggleMirror,
+    switchCamera,
   };
 };

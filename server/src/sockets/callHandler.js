@@ -9,7 +9,17 @@ const registerCallHandlers = (io, socket) => {
       if (!from || !to || !offer) return;
 
       const caller = await User.findById(from);
-      if (!caller) return;
+      const recipient = await User.findById(to);
+      if (!caller || !recipient) return;
+
+      // Check if blocked
+      if (
+        recipient.blockedUsers?.some((id) => String(id) === String(from)) ||
+        caller.blockedUsers?.some((id) => String(id) === String(to))
+      ) {
+        socket.emit('call:rejected', { from: to, reason: 'blocked' });
+        return;
+      }
 
       console.log(`[Call] ${callType.toUpperCase()} call initiated from ${caller.name} (${from}) to ${to}`);
 
