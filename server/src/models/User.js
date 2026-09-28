@@ -33,6 +33,39 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    // Friend Request & Contacts System
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    friendRequests: [
+      {
+        from: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    sentRequests: [
+      {
+        to: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -49,5 +82,6 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ isOnline: 1 });
+userSchema.index({ friends: 1 });
 
 module.exports = mongoose.model('User', userSchema);

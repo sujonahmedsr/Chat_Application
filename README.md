@@ -1,4 +1,4 @@
-# ShofiChat — Real-Time Messaging & WebRTC Video Calling Platform
+# Shofi Chat — Real-Time Messaging & WebRTC Video Calling Platform
 
 A production-ready, full-stack real-time communication application with 1-to-1 persistent text chat, **Group Chats**, **Image / Document / Voice Note Attachments**, and peer-to-peer real-time **Audio & Video Calling** powered by **WebSockets (Socket.io)** and **WebRTC**.
 
@@ -6,7 +6,7 @@ A production-ready, full-stack real-time communication application with 1-to-1 p
 
 ## 🌐 Live Production Links
 
-- **Frontend (Vercel)**: [https://client-kohl-six-37.vercel.app](https://client-kohl-six-37.vercel.app)
+- **Frontend (Vercel)**: [https://shofichat.vercel.app](https://shofichat.vercel.app)
 - **Backend (Render)**: [https://chat-application-751k.onrender.com](https://chat-application-751k.onrender.com)
 - **Database (MongoDB Atlas)**: Connected (`Chat_Application` cluster)
 

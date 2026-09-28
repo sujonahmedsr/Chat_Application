@@ -1,10 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Search, LogOut, PhoneCall, MessageSquare, Users, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Search,
+  LogOut,
+  PhoneCall,
+  MessageSquare,
+  Users,
+  UserPlus,
+  Bell,
+  BellOff,
+  UserCheck,
+} from 'lucide-react';
 import { User, Group } from '@/types';
 import { Avatar } from '../ui/Avatar';
 import { UserItem } from './UserItem';
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  playNotificationSound,
+} from '@/lib/notification';
 
 interface SidebarProps {
   currentUser: User | null;
@@ -17,6 +33,8 @@ interface SidebarProps {
   onLogout: () => void;
   onOpenCallLogs: () => void;
   onOpenCreateGroup: () => void;
+  onOpenFriendModal: () => void;
+  pendingRequestsCount: number;
   isLoadingUsers: boolean;
 }
 
@@ -31,10 +49,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   onOpenCallLogs,
   onOpenCreateGroup,
+  onOpenFriendModal,
+  pendingRequestsCount,
   isLoadingUsers,
 }) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'groups'>('chats');
   const [searchQuery, setSearchQuery] = useState('');
+  const [notificationStatus, setNotificationStatus] = useState<string>('default');
+
+  useEffect(() => {
+    if (isNotificationSupported()) {
+      setNotificationStatus(getNotificationPermission());
+    }
+  }, []);
+
+  const handleToggleNotification = async () => {
+    if (!isNotificationSupported()) {
+      alert('Desktop notifications are not supported in this browser.');
+      return;
+    }
+
+    if (notificationStatus === 'granted') {
+      // Test audio chime
+      playNotificationSound();
+      return;
+    }
+
+    const granted = await requestNotificationPermission();
+    setNotificationStatus(granted ? 'granted' : 'denied');
+    if (granted) {
+      playNotificationSound();
+    }
+  };
 
   const filteredUsers = users.filter((u) => {
     const q = searchQuery.toLowerCase().trim();
@@ -62,37 +108,81 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <h2 className="text-sm font-semibold text-white truncate">
               {currentUser?.name}
             </h2>
-            <p className="text-xs text-emerald-400 font-medium">Online</p>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <p className="text-xs text-emerald-400 font-medium">Online</p>
+            </div>
           </div>
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1 text-neutral-400">
+        <div className="flex items-center gap-0.5 text-neutral-400">
+          {/* Notifications toggle */}
+          <button
+            onClick={handleToggleNotification}
+            className={`p-2 rounded-xl transition-colors relative ${
+              notificationStatus === 'granted'
+                ? 'text-emerald-400 hover:bg-neutral-800'
+                : 'hover:text-amber-400 hover:bg-neutral-800'
+            }`}
+            title={
+              notificationStatus === 'granted'
+                ? 'Notifications Enabled (Click to test sound)'
+                : 'Enable Browser & Sound Notifications'
+            }
+          >
+            {notificationStatus === 'granted' ? (
+              <Bell className="w-4.5 h-4.5" />
+            ) : (
+              <BellOff className="w-4.5 h-4.5 text-neutral-400" />
+            )}
+          </button>
+
+          {/* Friends & Requests Modal */}
+          <button
+            onClick={onOpenFriendModal}
+            className="p-2 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors relative"
+            title="Friends & Add Contacts"
+          >
+            <UserCheck className="w-4.5 h-4.5" />
+            {pendingRequestsCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-neutral-900 animate-ping" />
+            )}
+            {pendingRequestsCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-neutral-900" />
+            )}
+          </button>
+
+          {/* Create Group */}
           <button
             onClick={onOpenCreateGroup}
             className="p-2 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
             title="Create New Group"
           >
-            <UserPlus className="w-5 h-5" />
+            <Users className="w-4.5 h-4.5" />
           </button>
+
+          {/* Call History */}
           <button
             onClick={onOpenCallLogs}
             className="p-2 rounded-xl hover:text-white hover:bg-neutral-800 transition-colors"
             title="Call History"
           >
-            <PhoneCall className="w-5 h-5" />
+            <PhoneCall className="w-4.5 h-4.5" />
           </button>
+
+          {/* Logout */}
           <button
             onClick={onLogout}
             className="p-2 rounded-xl hover:text-red-400 hover:bg-neutral-800 transition-colors"
             title="Logout"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4.5 h-4.5" />
           </button>
         </div>
       </div>
 
-      {/* Tabs: Direct Chats vs Groups */}
+      {/* Tabs: Direct Chats (Friends) vs Groups */}
       <div className="flex p-1.5 mx-3 mt-3 bg-neutral-850 rounded-xl border border-neutral-800">
         <button
           onClick={() => setActiveTab('chats')}
@@ -103,7 +193,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <MessageSquare className="w-3.5 h-3.5" />
-          <span>Direct Chats ({users.length})</span>
+          <span>Friends ({users.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('groups')}
@@ -126,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={activeTab === 'chats' ? 'Search contacts...' : 'Search groups...'}
+            placeholder={activeTab === 'chats' ? 'Search friends...' : 'Search groups...'}
             className="w-full bg-transparent text-xs text-neutral-100 placeholder-neutral-400 focus:outline-none"
           />
           {searchQuery && (
@@ -145,15 +235,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isLoadingUsers ? (
           <div className="flex flex-col items-center justify-center h-48 text-neutral-400 text-xs">
             <span className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2" />
-            Loading...
+            Loading friends...
           </div>
         ) : activeTab === 'chats' ? (
           filteredUsers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-neutral-400 text-center px-4">
-              <MessageSquare className="w-8 h-8 text-neutral-600 mb-2 stroke-[1.5]" />
-              <p className="text-xs font-medium text-neutral-400">
-                {searchQuery ? 'No contacts match your search.' : 'No other users registered yet.'}
+            <div className="flex flex-col items-center justify-center h-56 text-neutral-400 text-center px-4">
+              <div className="w-12 h-12 rounded-2xl bg-neutral-800 flex items-center justify-center mb-3 text-neutral-500">
+                <UserPlus className="w-6 h-6 stroke-[1.5]" />
+              </div>
+              <p className="text-xs font-semibold text-neutral-200 mb-1">
+                {searchQuery ? 'No friends match your search' : 'No friends added yet'}
               </p>
+              <p className="text-[11px] text-neutral-400 mb-4 max-w-[200px]">
+                {searchQuery
+                  ? 'Try a different search term or add them as a friend.'
+                  : 'Send friend requests to start 1-to-1 conversations.'}
+              </p>
+              <button
+                onClick={onOpenFriendModal}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-900/20"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Add Friends</span>
+              </button>
             </div>
           ) : (
             filteredUsers.map((u) => (

@@ -41,14 +41,33 @@ const seedInitialData = async () => {
       lastSeen: new Date(Date.now() - 1000 * 60 * 60),
     });
 
-    // 1-to-1 Sample greeting message
-    await Message.create({
+    // Set mutual friends
+    alice.friends = [bob._id, charlie._id];
+    await alice.save();
+    bob.friends = [alice._id, charlie._id];
+    await bob.save();
+    charlie.friends = [alice._id, bob._id];
+    await charlie.save();
+
+    const { Conversation } = require('../models/Conversation');
+
+    const sample1on1Msg = {
       senderId: bob._id,
       receiverId: alice._id,
-      content: 'Hey Alice! Welcome to WhatsApp Web. Try calling me or sending an audio voice note or photo! 📞🎙️',
+      content: 'Hey Alice! Welcome to Shofi Chat. Try calling me or sending an audio voice note or photo! 📞🎙️',
       messageType: 'text',
       status: 'delivered',
       timestamp: new Date(Date.now() - 1000 * 60 * 2),
+    };
+
+    // 1-to-1 Sample greeting message
+    await Message.create(sample1on1Msg);
+
+    // Seed into nested Conversation
+    await Conversation.create({
+      participants: [bob._id, alice._id],
+      messages: [sample1on1Msg],
+      lastMessage: sample1on1Msg,
     });
 
     // Sample Group

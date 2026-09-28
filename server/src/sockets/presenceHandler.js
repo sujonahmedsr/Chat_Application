@@ -44,13 +44,18 @@ const handleUserConnected = async (io, socket, userId) => {
       { new: true }
     );
 
+    // Emit full list of currently online user IDs immediately to the newly connected socket
+    socket.emit('presence:sync', {
+      onlineUserIds: Array.from(onlineUsers.keys()),
+    });
+
     // Broadcast user:online to everyone
     io.emit('user:online', {
       userId: strUserId,
       lastSeen: user ? user.lastSeen : new Date(),
     });
 
-    // Mark undelivered messages to this user as 'delivered'
+    // Mark undelivered flat messages to this user as 'delivered'
     const undeliveredMessages = await Message.find({
       receiverId: strUserId,
       status: 'sent',

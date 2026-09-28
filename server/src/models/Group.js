@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { nestedMessageSchema } = require('./Conversation');
 
 const groupSchema = new mongoose.Schema(
   {
@@ -36,6 +37,12 @@ const groupSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    // Nested array of all group chat messages inside this group document
+    messages: [nestedMessageSchema],
+    lastMessage: {
+      type: Object,
+      default: null,
+    },
   },
   {
     timestamps: true,

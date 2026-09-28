@@ -9,12 +9,14 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
 import { sounds } from '@/lib/sound';
+import { triggerNotification } from '@/lib/notification';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { IncomingCallModal } from '@/components/call/IncomingCallModal';
 import { ActiveCallModal } from '@/components/call/ActiveCallModal';
 import { CallLogsModal } from '@/components/chat/CallLogsModal';
 import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
+import { FriendModal } from '@/components/chat/FriendModal';
 
 export default function ChatDashboard() {
   const { user: currentUser, loading: authLoading, logout } = useAuth();
@@ -32,6 +34,8 @@ export default function ChatDashboard() {
   const [groupTypingUser, setGroupTypingUser] = useState<string | null>(null);
   const [showCallLogs, setShowCallLogs] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showFriendModal, setShowFriendModal] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
   // WebRTC hook
@@ -61,16 +65,30 @@ export default function ChatDashboard() {
     }
   }, [authLoading, currentUser, router]);
 
-  // Fetch users directory
-  const fetchUsers = useCallback(async () => {
+  // Fetch confirmed friends list
+  const fetchFriends = useCallback(async () => {
     try {
       setIsLoadingUsers(true);
-      const data = await apiRequest('/users');
-      setUsers(data.users || []);
+      const data = await apiRequest('/friends');
+      setUsers(data.friends || []);
     } catch (err) {
-      console.error('Failed to fetch users:', err);
+      console.error('Failed to fetch friends, trying users fallback:', err);
+      try {
+        const fallback = await apiRequest('/users');
+        setUsers(fallback.users || []);
+      } catch (e) {}
     } finally {
       setIsLoadingUsers(false);
+    }
+  }, []);
+
+  // Fetch pending friend requests count
+  const fetchPendingRequestsCount = useCallback(async () => {
+    try {
+      const data = await apiRequest('/friends/requests');
+      setPendingRequestsCount(data.requests?.length || 0);
+    } catch (err) {
+      console.error('Failed to fetch pending requests count:', err);
     }
   }, []);
 
@@ -86,10 +104,11 @@ export default function ChatDashboard() {
 
   useEffect(() => {
     if (currentUser) {
-      fetchUsers();
+      fetchFriends();
       fetchGroups();
+      fetchPendingRequestsCount();
     }
-  }, [currentUser, fetchUsers, fetchGroups]);
+  }, [currentUser, fetchFriends, fetchGroups, fetchPendingRequestsCount]);
 
   // Sync users with live online presence
   useEffect(() => {
@@ -231,13 +250,19 @@ export default function ChatDashboard() {
 
     // Incoming 1-to-1 message
     const handleReceiveMessage = (message: Message) => {
+      const senderName = users.find((u) => u.id === message.senderId)?.name || 'Someone';
+
       if (selectedUser && message.senderId === selectedUser.id) {
         setMessages((prev) => [...prev, message]);
-        sounds.playMessageSound();
+        triggerNotification(`Shofi Chat: ${senderName}`, {
+          body: message.content || 'Sent an attachment',
+        });
         socket.emit('message:read', { senderId: selectedUser.id });
         apiRequest(`/messages/${selectedUser.id}/read`, { method: 'PUT' }).catch(() => {});
       } else {
-        sounds.playMessageSound();
+        triggerNotification(`Shofi Chat: ${senderName}`, {
+          body: message.content || 'Sent an attachment',
+        });
         setUsers((prev) =>
           prev.map((u) => {
             if (u.id === message.senderId) {
@@ -255,23 +280,43 @@ export default function ChatDashboard() {
 
     // Incoming group message
     const handleReceiveGroupMessage = (message: Message) => {
+      if (message.senderId === currentUser?.id) return;
+
+      const groupName = groups.find((g) => g.id === message.groupId)?.name || 'Group';
+
       if (selectedGroup && message.groupId === selectedGroup.id) {
-        // Avoid duplicate if sent by current user
         setMessages((prev) => {
           if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, message];
         });
-        if (message.senderId !== currentUser?.id) {
-          sounds.playMessageSound();
-        }
+        triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
+          body: message.content || 'Sent an attachment',
+        });
       } else {
-        sounds.playMessageSound();
+        triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
+          body: message.content || 'Sent an attachment',
+        });
         setGroups((prev) =>
           prev.map((g) =>
             g.id === message.groupId ? { ...g, lastMessage: message } : g
           )
         );
       }
+    };
+
+    // Friend requests listeners
+    const handleFriendRequestReceived = (data: { from: User }) => {
+      setPendingRequestsCount((prev) => prev + 1);
+      triggerNotification('Shofi Chat: Friend Request', {
+        body: `${data.from.name} sent you a friend request!`,
+      });
+    };
+
+    const handleFriendRequestAccepted = (data: { friend: User }) => {
+      fetchFriends();
+      triggerNotification('Shofi Chat: Request Accepted', {
+        body: `${data.friend.name} accepted your friend request!`,
+      });
     };
 
     // Delivery confirmation
@@ -324,6 +369,8 @@ export default function ChatDashboard() {
 
     socket.on('message:receive', handleReceiveMessage);
     socket.on('group:message:receive', handleReceiveGroupMessage);
+    socket.on('friend:request:received', handleFriendRequestReceived);
+    socket.on('friend:request:accepted', handleFriendRequestAccepted);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('message:read', handleMessageRead);
     socket.on('typing:start', handleRemoteTypingStart);
@@ -334,6 +381,8 @@ export default function ChatDashboard() {
     return () => {
       socket.off('message:receive', handleReceiveMessage);
       socket.off('group:message:receive', handleReceiveGroupMessage);
+      socket.off('friend:request:received', handleFriendRequestReceived);
+      socket.off('friend:request:accepted', handleFriendRequestAccepted);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('message:read', handleMessageRead);
       socket.off('typing:start', handleRemoteTypingStart);
@@ -341,13 +390,13 @@ export default function ChatDashboard() {
       socket.off('group:typing:start', handleGroupTypingStart);
       socket.off('group:typing:stop', handleGroupTypingStop);
     };
-  }, [socket, selectedUser, selectedGroup, currentUser?.id]);
+  }, [socket, selectedUser, selectedGroup, currentUser?.id, users, groups, fetchFriends]);
 
   if (authLoading || !currentUser) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-        <span className="text-sm font-medium">Initializing ShofiChat...</span>
+        <span className="text-sm font-medium">Initializing Shofi Chat...</span>
       </div>
     );
   }
@@ -367,6 +416,8 @@ export default function ChatDashboard() {
           onLogout={logout}
           onOpenCallLogs={() => setShowCallLogs(true)}
           onOpenCreateGroup={() => setShowCreateGroup(true)}
+          onOpenFriendModal={() => setShowFriendModal(true)}
+          pendingRequestsCount={pendingRequestsCount}
           isLoadingUsers={isLoadingUsers}
         />
       </div>
@@ -428,6 +479,14 @@ export default function ChatDashboard() {
           setGroups((prev) => [newGroup, ...prev]);
           handleSelectGroup(newGroup);
         }}
+      />
+
+      {/* Friends & Requests Modal */}
+      <FriendModal
+        isOpen={showFriendModal}
+        onClose={() => setShowFriendModal(false)}
+        onFriendAdded={fetchFriends}
+        onRequestHandled={fetchPendingRequestsCount}
       />
     </div>
   );

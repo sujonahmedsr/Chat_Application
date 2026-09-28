@@ -1,6 +1,7 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Group = require('../models/Group');
+const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('./presenceHandler');
 
 const registerChatHandlers = (io, socket) => {
@@ -42,11 +43,10 @@ const registerChatHandlers = (io, socket) => {
         return;
       }
 
-      // Group message flow
+      // Group message flow - nested inside Group document
       if (groupId) {
-        const message = await Message.create({
+        const messageData = {
           senderId,
-          groupId,
           content: content.trim(),
           messageType,
           fileUrl,
@@ -54,6 +54,18 @@ const registerChatHandlers = (io, socket) => {
           fileSize,
           status: 'delivered',
           timestamp: new Date(),
+        };
+
+        // Also create flat Message document for query flexibility
+        const message = await Message.create({
+          ...messageData,
+          groupId,
+        });
+
+        // Store nested inside Group document
+        await Group.findByIdAndUpdate(groupId, {
+          $push: { messages: messageData },
+          $set: { lastMessage: messageData, updatedAt: new Date() },
         });
 
         const sender = await User.findById(senderId, 'name avatar email');
@@ -65,20 +77,17 @@ const registerChatHandlers = (io, socket) => {
         // Broadcast to all sockets in the group room
         io.to(`group:${groupId}`).emit('group:message:receive', messageJSON);
 
-        // Also update group's updatedAt timestamp
-        await Group.findByIdAndUpdate(groupId, { updatedAt: new Date() });
-
         if (callback) {
           callback({ success: true, message: messageJSON, tempId });
         }
         return;
       }
 
-      // 1-to-1 direct message flow
+      // 1-to-1 direct message flow - nested inside Conversation document
       const receiverOnline = isUserOnline(receiverId);
       const initialStatus = receiverOnline ? 'delivered' : 'sent';
 
-      const message = await Message.create({
+      const messageData = {
         senderId,
         receiverId,
         content: content.trim(),
@@ -88,7 +97,22 @@ const registerChatHandlers = (io, socket) => {
         fileSize,
         status: initialStatus,
         timestamp: new Date(),
-      });
+      };
+
+      const message = await Message.create(messageData);
+
+      // Save inside nested Conversation document
+      await Conversation.findOneAndUpdate(
+        {
+          participants: { $all: [senderId, receiverId] },
+        },
+        {
+          $setOnInsert: { participants: [senderId, receiverId] },
+          $push: { messages: messageData },
+          $set: { lastMessage: messageData, updatedAt: new Date() },
+        },
+        { upsert: true, new: true }
+      );
 
       const messageJSON = message.toJSON();
 
@@ -122,6 +146,19 @@ const registerChatHandlers = (io, socket) => {
         },
         {
           $set: { status: 'read' },
+        }
+      );
+
+      // Also update nested conversation messages
+      await Conversation.updateOne(
+        {
+          participants: { $all: [currentUserId, senderId] },
+        },
+        {
+          $set: { 'messages.$[elem].status': 'read' },
+        },
+        {
+          arrayFilters: [{ 'elem.senderId': senderId, 'elem.status': { $ne: 'read' } }],
         }
       );
 

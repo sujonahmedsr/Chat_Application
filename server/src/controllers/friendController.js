@@ -1,0 +1,256 @@
+const User = require('../models/User');
+const { Conversation } = require('../models/Conversation');
+const { isUserOnline } = require('../sockets/presenceHandler');
+
+// Get all confirmed friends for current user
+const getFriends = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const currentUser = await User.findById(currentUserId).populate(
+      'friends',
+      'name email avatar isOnline lastSeen'
+    );
+
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const friends = currentUser.friends || [];
+
+    // Enrich with live presence and conversation preview
+    const enrichedFriends = await Promise.all(
+      friends.map(async (f) => {
+        const conversation = await Conversation.findOne({
+          participants: { $all: [currentUserId, f._id] },
+        });
+
+        // Compute unread count from nested messages
+        let unreadCount = 0;
+        let lastMessage = null;
+
+        if (conversation && conversation.messages?.length > 0) {
+          const msgs = conversation.messages;
+          lastMessage = msgs[msgs.length - 1];
+
+          unreadCount = msgs.filter(
+            (m) => String(m.senderId) === String(f._id) && m.status !== 'read'
+          ).length;
+        }
+
+        const online = isUserOnline(f._id);
+
+        return {
+          ...f.toJSON(),
+          isOnline: online,
+          lastSeen: online ? new Date() : f.lastSeen,
+          unreadCount,
+          lastMessage: lastMessage ? lastMessage.toJSON() : null,
+        };
+      })
+    );
+
+    return res.status(200).json({ friends: enrichedFriends });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get pending incoming friend requests
+const getPendingRequests = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).populate(
+      'friendRequests.from',
+      'name email avatar isOnline'
+    );
+
+    return res.status(200).json({
+      requests: user.friendRequests || [],
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Search users to add as friends
+const searchUsers = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const search = req.query.q ? req.query.q.trim() : '';
+
+    if (!search) {
+      return res.status(200).json({ users: [] });
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    const friendIds = (currentUser.friends || []).map(String);
+    const sentIds = (currentUser.sentRequests || []).map((r) => String(r.to));
+    const receivedIds = (currentUser.friendRequests || []).map((r) => String(r.from));
+
+    const users = await User.find({
+      _id: { $ne: currentUserId },
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ],
+    }).select('name email avatar isOnline lastSeen');
+
+    const results = users.map((u) => {
+      const uId = String(u._id);
+      return {
+        ...u.toJSON(),
+        isFriend: friendIds.includes(uId),
+        hasSentRequest: sentIds.includes(uId),
+        hasReceivedRequest: receivedIds.includes(uId),
+      };
+    });
+
+    return res.status(200).json({ users: results });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Send a friend request
+const sendFriendRequest = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const targetUserId = req.params.userId;
+
+    if (String(currentUserId) === String(targetUserId)) {
+      return res.status(400).json({ message: 'Cannot add yourself as a friend' });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    const currentUser = await User.findById(currentUserId);
+
+    if (!targetUser || !currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if already friends
+    if (currentUser.friends?.includes(targetUserId)) {
+      return res.status(400).json({ message: 'Already friends' });
+    }
+
+    // Check if request already sent
+    const alreadySent = currentUser.sentRequests?.some(
+      (r) => String(r.to) === String(targetUserId)
+    );
+    if (alreadySent) {
+      return res.status(400).json({ message: 'Friend request already sent' });
+    }
+
+    // Check if other user already sent a request to us - if so, auto accept!
+    const alreadyReceived = currentUser.friendRequests?.some(
+      (r) => String(r.from) === String(targetUserId)
+    );
+    if (alreadyReceived) {
+      // Auto accept mutual request
+      return acceptFriendRequest(req, res, next);
+    }
+
+    // Push request
+    await User.findByIdAndUpdate(targetUserId, {
+      $push: { friendRequests: { from: currentUserId } },
+    });
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $push: { sentRequests: { to: targetUserId } },
+    });
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${targetUserId}`).emit('friend:request:received', {
+        from: currentUser.toJSON(),
+      });
+    } catch (e) {
+      // socket might be offline or testing
+    }
+
+    return res.status(200).json({ success: true, message: 'Friend request sent!' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Accept a friend request
+const acceptFriendRequest = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const fromUserId = req.params.userId;
+
+    const fromUser = await User.findById(fromUserId);
+    const currentUser = await User.findById(currentUserId);
+
+    if (!fromUser || !currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Add each other to friends array and remove pending request records
+    await User.findByIdAndUpdate(currentUserId, {
+      $addToSet: { friends: fromUserId },
+      $pull: { friendRequests: { from: fromUserId } },
+    });
+
+    await User.findByIdAndUpdate(fromUserId, {
+      $addToSet: { friends: currentUserId },
+      $pull: { sentRequests: { to: currentUserId } },
+    });
+
+    // Ensure conversation document exists between newly formed friends
+    let conversation = await Conversation.findOne({
+      participants: { $all: [currentUserId, fromUserId] },
+    });
+
+    if (!conversation) {
+      await Conversation.create({
+        participants: [currentUserId, fromUserId],
+        messages: [],
+      });
+    }
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${fromUserId}`).emit('friend:request:accepted', {
+        friend: currentUser.toJSON(),
+      });
+    } catch (e) {}
+
+    return res.status(200).json({
+      success: true,
+      message: `You and ${fromUser.name} are now friends!`,
+      friend: fromUser.toJSON(),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Reject / cancel friend request
+const rejectFriendRequest = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const fromUserId = req.params.userId;
+
+    await User.findByIdAndUpdate(currentUserId, {
+      $pull: { friendRequests: { from: fromUserId } },
+    });
+
+    await User.findByIdAndUpdate(fromUserId, {
+      $pull: { sentRequests: { to: currentUserId } },
+    });
+
+    return res.status(200).json({ success: true, message: 'Friend request declined' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getFriends,
+  getPendingRequests,
+  searchUsers,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+};

@@ -56,6 +56,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsConnected(false);
     });
 
+    newSocket.on('presence:sync', ({ onlineUserIds }: { onlineUserIds: string[] }) => {
+      console.log('[Presence] Synced online users:', onlineUserIds);
+      setOnlineUserIds(new Set(onlineUserIds));
+    });
+
     newSocket.on('user:online', ({ userId }: { userId: string }) => {
       setOnlineUserIds((prev) => {
         const next = new Set(prev);

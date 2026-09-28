@@ -45,7 +45,7 @@ export default function LoginPage() {
             <MessageSquare className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            Welcome to ShofiChat
+            Welcome to Shofi Chat
           </h1>
           <p className="text-sm text-neutral-400 mt-1">
             Sign in to access your chats, groups, and WebRTC audio & video calls

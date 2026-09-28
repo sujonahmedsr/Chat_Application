@@ -85,6 +85,19 @@ const getGroupMessages = async (req, res, next) => {
   try {
     const { groupId } = req.params;
 
+    const group = await Group.findById(groupId).populate('messages.senderId', 'name email avatar');
+    if (group && group.messages && group.messages.length > 0) {
+      return res.status(200).json({
+        messages: group.messages.map((m) => {
+          const json = m.toJSON ? m.toJSON() : m;
+          return {
+            ...json,
+            sender: m.senderId,
+          };
+        }),
+      });
+    }
+
     const messages = await Message.find({ groupId })
       .populate('senderId', 'name email avatar')
       .sort({ timestamp: 1 });

@@ -22,14 +22,15 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://client-kohl-six-37.vercel.app'),
+  metadataBase: new URL('https://shofichat.vercel.app'),
   title: {
-    default: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
-    template: '%s | ShofiChat',
+    default: 'Shofi Chat — Real-Time Messaging & WebRTC Video Calling',
+    template: '%s | Shofi Chat',
   },
   description:
-    'Connect instantly with ShofiChat. Enjoy persistent 1-to-1 messaging, group chats, audio voice notes, file sharing, and peer-to-peer WebRTC audio and video calling.',
+    'Connect instantly with Shofi Chat. Enjoy persistent 1-to-1 messaging, group chats, audio voice notes, file sharing, and peer-to-peer WebRTC audio and video calling.',
   keywords: [
+    'Shofi Chat',
     'ShofiChat',
     'real-time messaging',
     'WebRTC video calling',
@@ -40,9 +41,9 @@ export const metadata: Metadata = {
     'Next.js chat app',
     'Socket.io real-time',
   ],
-  authors: [{ name: 'Shofi', url: 'https://client-kohl-six-37.vercel.app' }],
+  authors: [{ name: 'Shofi', url: 'https://shofichat.vercel.app' }],
   creator: 'Shofi',
-  publisher: 'ShofiChat',
+  publisher: 'Shofi Chat',
   formatDetection: {
     email: false,
     address: false,
@@ -51,15 +52,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://client-kohl-six-37.vercel.app',
-    siteName: 'ShofiChat',
-    title: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
+    url: 'https://shofichat.vercel.app',
+    siteName: 'Shofi Chat',
+    title: 'Shofi Chat — Real-Time Messaging & WebRTC Video Calling',
     description:
       'Ultra-fast real-time communication platform with persistent chat, group channels, voice notes, and crystal-clear WebRTC video & audio calling.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
+    title: 'Shofi Chat — Real-Time Messaging & WebRTC Video Calling',
     description:
       'Ultra-fast messaging and WebRTC video calling powered by Next.js, Socket.io, and MongoDB.',
     creator: '@shofichat',
