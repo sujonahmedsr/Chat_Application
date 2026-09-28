@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
@@ -14,9 +14,67 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+export const viewport: Viewport = {
+  themeColor: '#0a0a0a',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: 'WhatsApp Web - Real-Time Chat & Audio Calling',
-  description: 'Production-ready full-stack real-time communication application with persistent text chat and peer-to-peer WebRTC audio calling.',
+  metadataBase: new URL('https://client-kohl-six-37.vercel.app'),
+  title: {
+    default: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
+    template: '%s | ShofiChat',
+  },
+  description:
+    'Connect instantly with ShofiChat. Enjoy persistent 1-to-1 messaging, group chats, audio voice notes, file sharing, and peer-to-peer WebRTC audio and video calling.',
+  keywords: [
+    'ShofiChat',
+    'real-time messaging',
+    'WebRTC video calling',
+    'audio calls',
+    'group chat',
+    'instant messaging app',
+    'peer to peer calls',
+    'Next.js chat app',
+    'Socket.io real-time',
+  ],
+  authors: [{ name: 'Shofi', url: 'https://client-kohl-six-37.vercel.app' }],
+  creator: 'Shofi',
+  publisher: 'ShofiChat',
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://client-kohl-six-37.vercel.app',
+    siteName: 'ShofiChat',
+    title: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
+    description:
+      'Ultra-fast real-time communication platform with persistent chat, group channels, voice notes, and crystal-clear WebRTC video & audio calling.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ShofiChat — Real-Time Messaging & WebRTC Video Calling',
+    description:
+      'Ultra-fast messaging and WebRTC video calling powered by Next.js, Socket.io, and MongoDB.',
+    creator: '@shofichat',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
 };
 
 export default function RootLayout({
@@ -30,7 +88,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body suppressHydrationWarning className="h-full bg-neutral-950 text-neutral-100 flex flex-col font-sans overflow-hidden">
+      <body
+        suppressHydrationWarning
+        className="h-full bg-neutral-950 text-neutral-100 flex flex-col font-sans overflow-hidden"
+      >
         <AuthProvider>
           <SocketProvider>{children}</SocketProvider>
         </AuthProvider>

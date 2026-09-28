@@ -1,4 +1,4 @@
-# Full-Stack Real-Time Communication App (WhatsApp Web Clone)
+# ShofiChat — Real-Time Messaging & WebRTC Video Calling Platform
 
 A production-ready, full-stack real-time communication application with 1-to-1 persistent text chat, **Group Chats**, **Image / Document / Voice Note Attachments**, and peer-to-peer real-time **Audio & Video Calling** powered by **WebSockets (Socket.io)** and **WebRTC**.
 

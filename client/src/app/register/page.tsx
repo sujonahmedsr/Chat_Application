@@ -51,10 +51,10 @@ export default function RegisterPage() {
             <MessageSquare className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            Create an Account
+            Join ShofiChat
           </h1>
           <p className="text-sm text-neutral-400 mt-1">
-            Get started with instant messaging & WebRTC audio calls
+            Get started with real-time messaging, group channels & WebRTC calls
           </p>
         </div>
 

@@ -347,7 +347,7 @@ export default function ChatDashboard() {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-        <span className="text-sm font-medium">Initializing WhatsApp Web...</span>
+        <span className="text-sm font-medium">Initializing ShofiChat...</span>
       </div>
     );
   }

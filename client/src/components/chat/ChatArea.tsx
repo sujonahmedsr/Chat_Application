@@ -51,7 +51,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <ShieldCheck className="w-10 h-10 stroke-[1.5]" />
         </div>
         <h2 className="text-xl font-semibold text-white tracking-tight">
-          WhatsApp Real-Time Web
+          ShofiChat
         </h2>
         <p className="text-sm text-neutral-400 max-w-sm mt-2 leading-relaxed">
           Select a contact or group to start chatting, send voice recordings & photos, or initiate WebRTC audio/video calls.
