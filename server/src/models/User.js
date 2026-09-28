@@ -73,6 +73,16 @@ const userSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    // Admin Controls
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user',
+    },
+    isBlockedByAdmin: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

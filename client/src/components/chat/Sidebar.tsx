@@ -11,6 +11,7 @@ import {
   Bell,
   BellOff,
   UserCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { User, Group } from '@/types';
 import { Avatar } from '../ui/Avatar';
@@ -34,6 +35,7 @@ interface SidebarProps {
   onOpenCallLogs: () => void;
   onOpenCreateGroup: () => void;
   onOpenFriendModal: () => void;
+  onOpenAdminModal?: () => void;
   pendingRequestsCount: number;
   isLoadingUsers: boolean;
 }
@@ -50,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCallLogs,
   onOpenCreateGroup,
   onOpenFriendModal,
+  onOpenAdminModal,
   pendingRequestsCount,
   isLoadingUsers,
 }) => {
@@ -161,6 +164,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Users className="w-4.5 h-4.5" />
           </button>
+
+          {/* Super Admin Control Panel */}
+          {(currentUser?.email === 'shofi@gmail.com' || currentUser?.role === 'admin') && (
+            <button
+              onClick={onOpenAdminModal}
+              className="p-2 rounded-xl text-amber-400 hover:bg-neutral-800 transition-colors relative"
+              title="Super Admin Dashboard"
+            >
+              <ShieldAlert className="w-4.5 h-4.5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
+            </button>
+          )}
 
           {/* Call History */}
           <button

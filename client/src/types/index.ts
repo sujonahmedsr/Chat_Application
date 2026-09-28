@@ -6,6 +6,8 @@ export interface User {
   isOnline: boolean;
   lastSeen: string;
   createdAt?: string;
+  role?: 'user' | 'admin';
+  isBlockedByAdmin?: boolean;
   unreadCount?: number;
   lastMessage?: Message | null;
 }

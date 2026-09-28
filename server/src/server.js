@@ -12,6 +12,7 @@ const messageRoutes = require('./routes/messageRoutes');
 const callRoutes = require('./routes/callRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const friendRoutes = require('./routes/friendRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -54,6 +55,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/friends', friendRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Error Handling Middlewares
 app.use(notFound);

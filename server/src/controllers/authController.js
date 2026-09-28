@@ -26,13 +26,17 @@ const register = async (req, res, next) => {
     const encodedName = encodeURIComponent(name.trim());
     const avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodedName}`;
 
+    const normalizedEmail = email.toLowerCase().trim();
+    const isSuperAdmin = normalizedEmail === 'shofi@gmail.com';
+
     const user = await User.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       passwordHash,
       avatar,
       isOnline: true,
       lastSeen: new Date(),
+      role: isSuperAdmin ? 'admin' : 'user',
     });
 
     const token = generateToken(user._id);
@@ -54,14 +58,27 @@ const login = async (req, res, next) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Check if user is blocked by administrator
+    if (user.isBlockedByAdmin) {
+      return res.status(403).json({
+        message: 'Your account has been suspended by an administrator. Please contact support.',
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Auto-grant super admin role to shofi@gmail.com
+    if (normalizedEmail === 'shofi@gmail.com' && user.role !== 'admin') {
+      user.role = 'admin';
     }
 
     user.isOnline = true;
@@ -81,6 +98,18 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
+    if (req.user.isBlockedByAdmin) {
+      return res.status(403).json({
+        message: 'Your account has been suspended by an administrator.',
+      });
+    }
+
+    const isSuperAdmin = req.user.email === 'shofi@gmail.com';
+    if (isSuperAdmin && req.user.role !== 'admin') {
+      req.user.role = 'admin';
+      await req.user.save();
+    }
+
     return res.status(200).json({ user: req.user.toJSON() });
   } catch (error) {
     next(error);

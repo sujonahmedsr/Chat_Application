@@ -17,6 +17,7 @@ import { ActiveCallModal } from '@/components/call/ActiveCallModal';
 import { CallLogsModal } from '@/components/chat/CallLogsModal';
 import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
 import { FriendModal } from '@/components/chat/FriendModal';
+import { AdminModal } from '@/components/admin/AdminModal';
 
 export default function ChatDashboard() {
   const { user: currentUser, loading: authLoading, logout } = useAuth();
@@ -35,6 +36,7 @@ export default function ChatDashboard() {
   const [showCallLogs, setShowCallLogs] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
@@ -430,12 +432,24 @@ export default function ChatDashboard() {
       }
     };
 
+    const handleAdminBlocked = (data: { message?: string }) => {
+      alert(data.message || 'Your account has been suspended by an administrator.');
+      logout();
+    };
+
+    const handleAdminDeleted = (data: { message?: string }) => {
+      alert(data.message || 'Your account has been deleted by an administrator.');
+      logout();
+    };
+
     socket.on('message:receive', handleReceiveMessage);
     socket.on('group:message:receive', handleReceiveGroupMessage);
     socket.on('friend:request:received', handleFriendRequestReceived);
     socket.on('friend:request:accepted', handleFriendRequestAccepted);
     socket.on('friend:unfriended', handleUnfriended);
     socket.on('friend:blocked', handleBlocked);
+    socket.on('user:admin:blocked', handleAdminBlocked);
+    socket.on('user:admin:deleted', handleAdminDeleted);
     socket.on('message:delivered', handleMessageDelivered);
     socket.on('message:read', handleMessageRead);
     socket.on('typing:start', handleRemoteTypingStart);
@@ -450,6 +464,8 @@ export default function ChatDashboard() {
       socket.off('friend:request:accepted', handleFriendRequestAccepted);
       socket.off('friend:unfriended', handleUnfriended);
       socket.off('friend:blocked', handleBlocked);
+      socket.off('user:admin:blocked', handleAdminBlocked);
+      socket.off('user:admin:deleted', handleAdminDeleted);
       socket.off('message:delivered', handleMessageDelivered);
       socket.off('message:read', handleMessageRead);
       socket.off('typing:start', handleRemoteTypingStart);
@@ -457,7 +473,7 @@ export default function ChatDashboard() {
       socket.off('group:typing:start', handleGroupTypingStart);
       socket.off('group:typing:stop', handleGroupTypingStop);
     };
-  }, [socket, selectedUser, selectedGroup, currentUser?.id, users, groups, fetchFriends]);
+  }, [socket, selectedUser, selectedGroup, currentUser?.id, users, groups, fetchFriends, logout]);
 
   if (authLoading || !currentUser) {
     return (
@@ -484,6 +500,7 @@ export default function ChatDashboard() {
           onOpenCallLogs={() => setShowCallLogs(true)}
           onOpenCreateGroup={() => setShowCreateGroup(true)}
           onOpenFriendModal={() => setShowFriendModal(true)}
+          onOpenAdminModal={() => setShowAdminModal(true)}
           pendingRequestsCount={pendingRequestsCount}
           isLoadingUsers={isLoadingUsers}
         />
@@ -562,6 +579,13 @@ export default function ChatDashboard() {
         onClose={() => setShowFriendModal(false)}
         onFriendAdded={fetchFriends}
         onRequestHandled={fetchPendingRequestsCount}
+      />
+
+      {/* Super Admin Control Panel Modal */}
+      <AdminModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        onUsersUpdated={fetchFriends}
       />
     </div>
   );

@@ -151,6 +151,33 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  const checkIsSelf = (msg: Message): boolean => {
+    if (!currentUser) return false;
+    const currentId = String(currentUser.id || (currentUser as any)._id || '');
+    if (!currentId) return false;
+
+    // 1. Direct senderId
+    if (msg.senderId) {
+      if (typeof msg.senderId === 'string' && String(msg.senderId) === currentId) {
+        return true;
+      }
+      if (typeof msg.senderId === 'object') {
+        const s = msg.senderId as any;
+        const sId = String(s._id || s.id || '');
+        if (sId && sId === currentId) return true;
+      }
+    }
+
+    // 2. Sender object
+    if (msg.sender) {
+      const s = msg.sender as any;
+      const sId = String(s._id || s.id || '');
+      if (sId && sId === currentId) return true;
+    }
+
+    return false;
+  };
+
   return (
     <main className="flex-1 flex flex-col h-full bg-neutral-950 overflow-hidden relative">
       {/* Chat Header */}
@@ -318,7 +345,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <MessageBubble
               key={msg.id}
               message={msg}
-              isSelf={msg.senderId === currentUser?.id}
+              isSelf={checkIsSelf(msg)}
               isGroup={isGroup}
               theme={chatTheme}
             />

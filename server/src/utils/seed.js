@@ -5,8 +5,29 @@ const Group = require('../models/Group');
 
 const seedInitialData = async () => {
   try {
+    // 1. Always ensure Super Admin shofi@gmail.com exists
+    let shofiAdmin = await User.findOne({ email: 'shofi@gmail.com' });
+    if (!shofiAdmin) {
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash('admin123', salt);
+      shofiAdmin = await User.create({
+        name: 'Shofi (Super Admin)',
+        email: 'shofi@gmail.com',
+        passwordHash,
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=ShofiAdmin',
+        role: 'admin',
+        isOnline: false,
+        lastSeen: new Date(),
+      });
+      console.log('[Seed] 🛡️ Super Admin created: shofi@gmail.com / admin123');
+    } else if (shofiAdmin.role !== 'admin') {
+      shofiAdmin.role = 'admin';
+      await shofiAdmin.save();
+      console.log('[Seed] 🛡️ Upgraded shofi@gmail.com to Super Admin');
+    }
+
     const userCount = await User.countDocuments();
-    if (userCount > 0) {
+    if (userCount > 1) {
       return;
     }
 
