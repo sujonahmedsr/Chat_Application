@@ -45,8 +45,8 @@ jobs:
         working-directory: ./client
 
     env:
-      NEXT_PUBLIC_API_URL: https://placeholder-backend.onrender.com/api
-      NEXT_PUBLIC_SOCKET_URL: https://placeholder-backend.onrender.com
+      NEXT_PUBLIC_API_URL: https://chat-application-751k.onrender.com/api
+      NEXT_PUBLIC_SOCKET_URL: https://chat-application-751k.onrender.com
 
     steps:
       - name: Checkout Code
