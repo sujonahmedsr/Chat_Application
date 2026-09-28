@@ -4,6 +4,14 @@ A production-ready, full-stack real-time communication application with 1-to-1 p
 
 ---
 
+## 🌐 Live Production Links
+
+- **Frontend (Vercel)**: [https://client-kohl-six-37.vercel.app](https://client-kohl-six-37.vercel.app)
+- **Backend (Render)**: [https://chat-application-751k.onrender.com](https://chat-application-751k.onrender.com)
+- **Database (MongoDB Atlas)**: Connected (`Chat_Application` cluster)
+
+---
+
 ## 🚀 Tech Stack
 
 - **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Lucide React, Socket.io Client.
