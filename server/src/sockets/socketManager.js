@@ -9,7 +9,9 @@ let ioInstance = null;
 const initSocket = (httpServer, clientUrl) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: [clientUrl, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+      origin: (origin, callback) => {
+        callback(null, true);
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
