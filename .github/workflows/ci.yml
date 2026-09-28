@@ -1,0 +1,66 @@
+name: CI/CD Pipeline - Build & Quality Checks
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # -----------------------------------------------
+  # Server Syntax & Dependency Validation
+  # -----------------------------------------------
+  server-check:
+    name: Backend (Express + Socket.io) Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: './server/package-lock.json'
+
+      - name: Install Server Dependencies
+        run: npm ci
+
+      - name: Verify Server Syntax & Build Check
+        run: npm run build
+
+  # -----------------------------------------------
+  # Client Next.js, TypeScript & Production Build
+  # -----------------------------------------------
+  client-check:
+    name: Frontend (Next.js + TypeScript) Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./client
+
+    env:
+      NEXT_PUBLIC_API_URL: https://placeholder-backend.onrender.com/api
+      NEXT_PUBLIC_SOCKET_URL: https://placeholder-backend.onrender.com
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: './client/package-lock.json'
+
+      - name: Install Client Dependencies
+        run: npm ci
+
+      - name: Next.js TypeScript Validation & Production Build
+        run: npm run build
