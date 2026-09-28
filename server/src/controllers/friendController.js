@@ -2,22 +2,30 @@ const User = require('../models/User');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('../sockets/presenceHandler');
 
-// Get all confirmed friends for current user
+// Get all confirmed friends for current user (Super Admin gets all users directly)
 const getFriends = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const currentUser = await User.findById(currentUserId).populate(
-      'friends',
-      'name email avatar isOnline lastSeen'
-    );
+    const isSuperAdmin = req.user.email === 'shofi@gmail.com' || req.user.role === 'admin';
 
-    if (!currentUser) {
-      return res.status(404).json({ message: 'User not found' });
+    let friends;
+    if (isSuperAdmin) {
+      // Super Admin can directly chat with any registered user
+      friends = await User.find({ _id: { $ne: currentUserId } }, 'name email avatar isOnline lastSeen');
+    } else {
+      const currentUser = await User.findById(currentUserId).populate(
+        'friends',
+        'name email avatar isOnline lastSeen'
+      );
+
+      if (!currentUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const blockedIds = (currentUser.blockedUsers || []).map(String);
+      const rawFriends = currentUser.friends || [];
+      friends = rawFriends.filter((f) => !blockedIds.includes(String(f._id)));
     }
-
-    const blockedIds = (currentUser.blockedUsers || []).map(String);
-    const rawFriends = currentUser.friends || [];
-    const friends = rawFriends.filter((f) => !blockedIds.includes(String(f._id)));
 
     // Enrich with live presence and conversation preview
     const enrichedFriends = await Promise.all(

@@ -25,9 +25,13 @@ const handleUserConnected = async (io, socket, userId) => {
   // Join personal room for convenient targeted emits
   socket.join(`user:${strUserId}`);
 
-  // Auto-join all group rooms this user belongs to
+  // Auto-join group rooms (Super Admin joins all groups)
   try {
-    const userGroups = await Group.find({ members: strUserId }, '_id');
+    const userDoc = await User.findById(strUserId, 'email role');
+    const isSuperAdmin = userDoc?.email === 'shofi@gmail.com' || userDoc?.role === 'admin';
+    const groupFilter = isSuperAdmin ? {} : { members: strUserId };
+
+    const userGroups = await Group.find(groupFilter, '_id');
     userGroups.forEach((g) => {
       socket.join(`group:${g._id}`);
     });

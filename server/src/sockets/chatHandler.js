@@ -49,17 +49,21 @@ const registerChatHandlers = (io, socket) => {
       if (receiverId) {
         const receiver = await User.findById(receiverId);
         const sender = await User.findById(senderId);
-        const isBlocked =
-          receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
-          sender?.blockedUsers?.some((id) => String(id) === String(receiverId));
-        if (isBlocked) {
-          if (callback) callback({ error: 'Cannot send message to this user' });
-          return;
+        const isSuperAdmin = sender?.email === 'shofi@gmail.com' || sender?.role === 'admin';
+        if (!isSuperAdmin) {
+          const isBlocked =
+            receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
+            sender?.blockedUsers?.some((id) => String(id) === String(receiverId));
+          if (isBlocked) {
+            if (callback) callback({ error: 'Cannot send message to this user' });
+            return;
+          }
         }
       }
 
       // Group message flow - nested inside Group document
       if (groupId) {
+        socket.join(`group:${groupId}`);
         const messageData = {
           senderId,
           content: content.trim(),

@@ -49,10 +49,10 @@ const createGroup = async (req, res, next) => {
 const getUserGroups = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
+    const isSuperAdmin = req.user.email === 'shofi@gmail.com' || req.user.role === 'admin';
+    const query = isSuperAdmin ? {} : { members: currentUserId };
 
-    const groups = await Group.find({
-      members: currentUserId,
-    })
+    const groups = await Group.find(query)
       .populate('members', 'name email avatar isOnline lastSeen')
       .populate('creator', 'name email avatar')
       .sort({ updatedAt: -1 });

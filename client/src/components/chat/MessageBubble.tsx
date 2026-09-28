@@ -143,9 +143,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       >
         {/* Group Sender Name */}
         {isGroup && !isSelf && senderName && (
-          <p className="text-[11px] font-semibold text-emerald-400 mb-1 select-none">
-            {senderName}
-          </p>
+          <div className="flex items-center gap-1.5 mb-1 select-none">
+            <span className="text-[11px] font-semibold text-emerald-400">
+              {senderName}
+            </span>
+            {(message.sender?.email === 'shofi@gmail.com' ||
+              (message.sender as any)?.role === 'admin' ||
+              (message as any).senderId?.email === 'shofi@gmail.com') && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/25 text-amber-300 border border-amber-500/30">
+                Admin
+              </span>
+            )}
+          </div>
         )}
 
         {/* AUDIO / VOICE NOTE ATTACHMENT (NO DOWNLOAD ALLOWED) */}

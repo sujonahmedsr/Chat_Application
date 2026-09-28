@@ -65,9 +65,16 @@ export const UserItem: React.FC<UserItemProps> = ({
       {/* User info & message preview */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <span className="font-medium text-sm text-neutral-100 truncate">
-            {user.name}
-          </span>
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="font-medium text-sm text-neutral-100 truncate">
+              {user.name}
+            </span>
+            {(user.email === 'shofi@gmail.com' || (user as any).role === 'admin') && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex-shrink-0">
+                Admin
+              </span>
+            )}
+          </div>
 
           {user.lastMessage?.timestamp && (
             <span className="text-[11px] text-neutral-400 font-mono flex-shrink-0">
