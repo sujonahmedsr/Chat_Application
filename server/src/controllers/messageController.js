@@ -225,14 +225,20 @@ const sendMessage = async (req, res, next) => {
       const senderUser = await User.findById(currentUserId, 'name avatar email');
       const messageJSON = {
         ...message.toJSON(),
+        content: decryptServerMessage(message.content),
         sender: senderUser ? senderUser.toJSON() : null,
       };
-      getIO().to(`user:${receiverId}`).emit('message:receive', messageJSON);
-      getIO().to(`user:${currentUserId}`).emit('message:receive', messageJSON);
-      getIO().to(`user:${currentUserId}`).emit('message:sent-sync', messageJSON);
+      getIO().to(`user:${String(receiverId)}`).emit('message:receive', messageJSON);
+      getIO().to(`user:${String(currentUserId)}`).emit('message:receive', messageJSON);
+      getIO().to(`user:${String(currentUserId)}`).emit('message:sent-sync', messageJSON);
     } catch (e) {}
 
-    return res.status(201).json({ message: message.toJSON() });
+    return res.status(201).json({
+      message: {
+        ...message.toJSON(),
+        content: decryptServerMessage(message.content),
+      },
+    });
   } catch (error) {
     next(error);
   }

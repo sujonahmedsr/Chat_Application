@@ -146,9 +146,11 @@ const deleteProfile = async (req, res, next) => {
     }
 
     const Group = require('../models/Group');
-    const Conversation = require('../models/Conversation');
+    const { Conversation } = require('../models/Conversation');
+    const Message = require('../models/Message');
+    const CallLog = require('../models/CallLog');
 
-    // Remove user references from other users
+    // 1. Remove user references from other users (friends, requests, blocked)
     await User.updateMany(
       {},
       {
@@ -161,26 +163,58 @@ const deleteProfile = async (req, res, next) => {
       }
     );
 
-    // Remove user from groups
+    // 2. Clean up groups created by this user
+    const createdGroups = await Group.find({ creator: userId });
+    const createdGroupIds = createdGroups.map((g) => g._id);
+    if (createdGroupIds.length > 0) {
+      await Message.deleteMany({ groupId: { $in: createdGroupIds } });
+      await Group.deleteMany({ _id: { $in: createdGroupIds } });
+    }
+
+    // 3. Remove user from all other groups and scrub their nested messages
     await Group.updateMany(
       { members: userId },
-      { $pull: { members: userId, admins: userId } }
+      {
+        $pull: {
+          members: userId,
+          admins: userId,
+          messages: { senderId: userId },
+        },
+      }
     );
     // Remove empty groups
     await Group.deleteMany({ members: { $size: 0 } });
 
-    // Clean up direct messages and conversations
+    // 4. Wipe all direct messages and nested conversations
     await Message.deleteMany({
       $or: [{ senderId: userId }, { receiverId: userId }],
     });
-    await Conversation.deleteMany({ participants: userId });
+    if (Conversation) {
+      await Conversation.deleteMany({ participants: userId });
+    }
 
-    // Delete user
+    // 5. Clean up all call logs involving this user
+    await CallLog.deleteMany({
+      $or: [{ callerId: userId }, { receiverId: userId }],
+    });
+
+    // 6. Delete user account document
     await User.findByIdAndDelete(userId);
+
+    // 7. Realtime Socket notification across all devices
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      const io = getIO();
+      io.to(`user:${userId}`).emit('user:admin:deleted', {
+        message: 'Your account and all communication data have been completely deleted.',
+      });
+      io.emit('user:offline', { userId: String(userId) });
+      io.emit('friend:unfriended', { userId: String(userId) });
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,
-      message: 'Account and profile deleted successfully',
+      message: 'Your account and all communication data have been deleted successfully',
     });
   } catch (error) {
     next(error);

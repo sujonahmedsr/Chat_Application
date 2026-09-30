@@ -60,6 +60,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
   const targetUserIdRef = useRef<string | null>(null);
   const callTypeRef = useRef<'audio' | 'video'>('audio');
   const durationRef = useRef<number>(0);
+  const callStatusRef = useRef<CallState>('idle');
 
   // Dedicated background audio element to guarantee audio playback across all devices/OS
   useEffect(() => {
@@ -88,6 +89,10 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
   useEffect(() => {
     durationRef.current = duration;
   }, [duration]);
+
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
 
   // Synchronize stream with video & audio elements whenever streams update
   useEffect(() => {
@@ -538,7 +543,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
     const handleIncomingCall = (data: IncomingCallData) => {
       console.log(`[WebRTC] Incoming ${data.callType || 'audio'} call from:`, data.callerName);
-      if (callStatus !== 'idle') {
+      if (callStatusRef.current !== 'idle') {
         socket.emit('call:rejected', { to: data.from, callType: data.callType });
         return;
       }
@@ -615,7 +620,8 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       socket.off('call:rejected', handleCallRejected);
       socket.off('call:ended', handleCallEnded);
     };
-  }, [socket, callStatus, cleanupCall]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, cleanupCall]);
 
   return {
     callStatus,

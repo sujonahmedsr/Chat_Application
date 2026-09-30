@@ -97,6 +97,7 @@ const getUserGroups = async (req, res, next) => {
           lastMessage: lastMessage
             ? {
                 ...lastMessage.toJSON(),
+                content: decryptServerMessage(lastMessage.content),
                 sender: lastMessage.senderId,
               }
             : null,

@@ -2,6 +2,7 @@ const User = require('../models/User');
 const { Conversation } = require('../models/Conversation');
 const Message = require('../models/Message');
 const { isUserOnline } = require('../sockets/presenceHandler');
+const { decryptServerMessage } = require('../utils/encryption');
 
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 
@@ -58,12 +59,19 @@ const getFriends = async (req, res, next) => {
 
         const online = isUserOnline(f._id);
 
+        let lastMessageJSON = null;
+        if (lastMessage) {
+          const lm = lastMessage.toJSON ? lastMessage.toJSON() : { ...lastMessage };
+          lm.content = decryptServerMessage(lm.content);
+          lastMessageJSON = lm;
+        }
+
         return {
           ...f.toJSON(),
           isOnline: online,
           lastSeen: online ? new Date() : f.lastSeen,
           unreadCount,
-          lastMessage: lastMessage ? lastMessage.toJSON() : null,
+          lastMessage: lastMessageJSON,
         };
       })
     );

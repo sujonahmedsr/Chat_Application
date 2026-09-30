@@ -4,7 +4,7 @@ const Group = require('../models/Group');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('./presenceHandler');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
-const { encryptServerMessage } = require('../utils/encryption');
+const { encryptServerMessage, decryptServerMessage } = require('../utils/encryption');
 
 const MAX_SOCKET_MESSAGES = 300;
 
@@ -126,11 +126,12 @@ const registerChatHandlers = (io, socket) => {
         const sender = await User.findById(senderId, 'name avatar email');
         const messageJSON = {
           ...message.toJSON(),
+          content: decryptServerMessage(message.content),
           sender: sender ? sender.toJSON() : null,
         };
 
         // Broadcast to all sockets in the group room
-        io.to(`group:${groupId}`).emit('group:message:receive', messageJSON);
+        io.to(`group:${String(groupId)}`).emit('group:message:receive', messageJSON);
 
         if (callback) {
           callback({ success: true, message: messageJSON, tempId });
@@ -202,11 +203,12 @@ const registerChatHandlers = (io, socket) => {
       const senderUser = await User.findById(senderId, 'name avatar email');
       const messageJSON = {
         ...message.toJSON(),
+        content: decryptServerMessage(message.content),
         sender: senderUser ? senderUser.toJSON() : null,
       };
 
       // Emit to receiver's personal room
-      io.to(`user:${receiverId}`).emit('message:receive', messageJSON);
+      io.to(`user:${String(receiverId)}`).emit('message:receive', messageJSON);
 
       // Emit acknowledgment back to sender socket
       if (callback) {
@@ -214,8 +216,8 @@ const registerChatHandlers = (io, socket) => {
       }
 
       // Realtime Sync across sender's other devices/tabs (e.g. mobile <-> desktop)
-      socket.to(`user:${senderId}`).emit('message:receive', messageJSON);
-      socket.to(`user:${senderId}`).emit('message:sent-sync', messageJSON);
+      socket.to(`user:${String(senderId)}`).emit('message:receive', messageJSON);
+      socket.to(`user:${String(senderId)}`).emit('message:sent-sync', messageJSON);
     } catch (err) {
       console.error('[ChatHandler] Error sending message:', err);
       if (callback) callback({ error: 'Failed to send message' });
