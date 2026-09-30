@@ -206,6 +206,3 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
    * Accept the call on another device/browser to test bidirectional video/audio streams and picture-in-picture preview.
 
 ---
-
-## 📄 License
-This project is open-source and available under the [MIT License](LICENSE).
