@@ -11,7 +11,7 @@ export const getApiBaseUrl = () => {
     }
   }
 
-  return process.env.NEXT_PUBLIC_API_URL || '/api';
+  return process.env.NEXT_PUBLIC_API_URL || 'https://chat-application-751k.onrender.com/api';
 };
 
 export const apiRequest = async (

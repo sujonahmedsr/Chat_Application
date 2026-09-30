@@ -45,6 +45,7 @@ interface SidebarProps {
   onOpenFriendModal: () => void;
   onOpenAdminModal?: () => void;
   onOpenSettings?: () => void;
+  onOpenNotificationSetup?: () => void;
   pendingRequestsCount: number;
   isLoadingUsers: boolean;
 }
@@ -63,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenFriendModal,
   onOpenAdminModal,
   onOpenSettings,
+  onOpenNotificationSetup,
   pendingRequestsCount,
   isLoadingUsers,
 }) => {
@@ -164,6 +166,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
 
+            {/* Notification Setup Button */}
+            <button
+              onClick={onOpenNotificationSetup}
+              className="p-1.5 rounded-xl text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+              title="Notification Setup"
+            >
+              <Bell className="w-4 h-4" />
+            </button>
+
             {/* Profile Settings Three-Dot Button (Available for everyone) */}
             <button
               onClick={onOpenSettings}
@@ -208,17 +219,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <button
-            onClick={handleToggleNotification}
+            onClick={onOpenNotificationSetup}
             className={`p-1.5 rounded-xl transition-colors relative ${
               notificationStatus === 'granted'
                 ? 'text-emerald-400 hover:bg-neutral-800'
                 : 'hover:text-amber-400 hover:bg-neutral-800'
             }`}
-            title={
-              notificationStatus === 'granted'
-                ? 'Notifications Enabled'
-                : 'Enable Browser Notifications'
-            }
+            title="Notification Setup"
           >
             {notificationStatus === 'granted' ? (
               <Bell className="w-4 h-4" />

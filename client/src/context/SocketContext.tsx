@@ -34,7 +34,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    let socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || '';
+    let socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://chat-application-751k.onrender.com';
     if (typeof window !== 'undefined') {
       const isLocal =
         window.location.hostname === 'localhost' ||

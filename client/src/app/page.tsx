@@ -19,6 +19,7 @@ import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
 import { FriendModal } from '@/components/chat/FriendModal';
 import { AdminModal } from '@/components/admin/AdminModal';
 import { SettingsModal } from '@/components/chat/SettingsModal';
+import { NotificationModal } from '@/components/chat/NotificationModal';
 import {
   encryptMessage,
   decryptMessage,
@@ -47,6 +48,7 @@ export default function ChatDashboard() {
   const [showFriendModal, setShowFriendModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [activeToast, setActiveToast] = useState<ToastNotificationData | null>(null);
@@ -449,13 +451,30 @@ export default function ChatDashboard() {
       const sender = users.find((u) => u.id === message.senderId);
       const senderName = sender?.name || 'Someone';
 
+      let notifTitle = `New message from ${senderName}`;
+      if (message.replyTo) {
+        notifTitle = `💬 ${senderName} replied to your message`;
+      } else if (
+        currentUser?.username &&
+        displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`)
+      ) {
+        notifTitle = `📣 ${senderName} mentioned you`;
+      }
+
       if (selectedUser && message.senderId === selectedUser.id) {
         setMessages((prev) => [...prev, displayMessage]);
+        if (
+          message.replyTo ||
+          (currentUser?.username &&
+            displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`))
+        ) {
+          showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note');
+        }
         socket.emit('message:read', { senderId: selectedUser.id });
         apiRequest(`/messages/${selectedUser.id}/read`, { method: 'PUT' }).catch(() => {});
       } else {
         if (message.messageType !== 'call') {
-          showNotificationAlert(`New message from ${senderName}`, displayMessage.content || 'Voice Note', () => {
+          showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note', () => {
             if (sender) {
               handleSelectUser(sender);
             }
@@ -490,13 +509,30 @@ export default function ChatDashboard() {
       const group = groups.find((g) => g.id === message.groupId);
       const groupName = group?.name || 'Group';
 
+      let notifTitle = `${groupName} • ${message.sender?.name || 'Member'}`;
+      if (message.replyTo) {
+        notifTitle = `💬 ${message.sender?.name || 'Member'} replied to you in ${groupName}`;
+      } else if (
+        currentUser?.username &&
+        displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`)
+      ) {
+        notifTitle = `📣 ${message.sender?.name || 'Member'} mentioned you in ${groupName}`;
+      }
+
       if (selectedGroup && message.groupId === selectedGroup.id) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, displayMessage];
         });
+        if (
+          message.replyTo ||
+          (currentUser?.username &&
+            displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`))
+        ) {
+          showNotificationAlert(notifTitle, displayMessage.content || 'Voice note');
+        }
       } else {
-        showNotificationAlert(`${groupName} • ${message.sender?.name || 'Member'}`, displayMessage.content || 'Voice note', () => {
+        showNotificationAlert(notifTitle, displayMessage.content || 'Voice note', () => {
           if (group) {
             handleSelectGroup(group);
           }
@@ -665,6 +701,7 @@ export default function ChatDashboard() {
           onOpenFriendModal={() => setShowFriendModal(true)}
           onOpenAdminModal={() => setShowAdminModal(true)}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onOpenNotificationSetup={() => setShowNotificationModal(true)}
           pendingRequestsCount={pendingRequestsCount}
           isLoadingUsers={isLoadingUsers}
         />
@@ -774,6 +811,13 @@ export default function ChatDashboard() {
         onSaveProfile={updateProfile}
         onLogout={logout}
         isInitialSetup={currentUser.settings?.hasCompletedSetup === false}
+      />
+
+      {/* Notification Setup Modal */}
+      <NotificationModal
+        isOpen={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        onTestToast={(title, body) => showNotificationAlert(title, body)}
       />
 
       {/* Floating In-App Toast Notification */}

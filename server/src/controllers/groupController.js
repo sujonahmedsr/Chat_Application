@@ -211,8 +211,10 @@ const addGroupMembers = async (req, res, next) => {
       return res.status(404).json({ message: 'Group not found' });
     }
 
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
     const isGroupAdmin =
-      group.admins.some((id) => String(id) === String(currentUserId)) ||
+      isSuperAdmin ||
+      (group.admins || []).some((id) => String(id) === String(currentUserId)) ||
       String(group.creator) === String(currentUserId);
 
     if (!isGroupAdmin) {
@@ -220,10 +222,11 @@ const addGroupMembers = async (req, res, next) => {
     }
 
     // Add unique member IDs
-    const currentMemberIds = group.members.map(String);
+    const currentMemberIds = (group.members || []).map((m) => String(m._id || m));
     memberIds.forEach((id) => {
-      if (!currentMemberIds.includes(String(id))) {
-        group.members.push(id);
+      const strId = String(id);
+      if (!currentMemberIds.includes(strId)) {
+        group.members.push(strId);
       }
     });
 
@@ -254,8 +257,10 @@ const removeGroupMember = async (req, res, next) => {
       return res.status(404).json({ message: 'Group not found' });
     }
 
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
     const isGroupAdmin =
-      group.admins.some((id) => String(id) === String(currentUserId)) ||
+      isSuperAdmin ||
+      (group.admins || []).some((id) => String(id) === String(currentUserId)) ||
       String(group.creator) === String(currentUserId);
 
     if (!isGroupAdmin) {
@@ -266,8 +271,8 @@ const removeGroupMember = async (req, res, next) => {
       return res.status(400).json({ message: 'Cannot remove the group creator' });
     }
 
-    group.members = group.members.filter((m) => String(m) !== String(userId));
-    group.admins = group.admins.filter((a) => String(a) !== String(userId));
+    group.members = (group.members || []).filter((m) => String(m._id || m) !== String(userId));
+    group.admins = (group.admins || []).filter((a) => String(a._id || a) !== String(userId));
 
     await group.save();
 

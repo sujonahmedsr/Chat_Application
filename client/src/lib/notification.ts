@@ -5,7 +5,9 @@ let audioCtx: AudioContext | null = null;
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
     }
@@ -83,6 +85,46 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
+export interface NotificationPreferences {
+  sound: boolean;
+  desktop: boolean;
+  inAppToast: boolean;
+  notifyReply: boolean;
+  notifyMention: boolean;
+}
+
+const DEFAULT_PREFS: NotificationPreferences = {
+  sound: true,
+  desktop: true,
+  inAppToast: true,
+  notifyReply: true,
+  notifyMention: true,
+};
+
+export function getNotificationPreferences(): NotificationPreferences {
+  if (typeof window === 'undefined') return DEFAULT_PREFS;
+  try {
+    const raw = localStorage.getItem('shofi_notification_prefs');
+    if (!raw) return DEFAULT_PREFS;
+    return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+export function saveNotificationPreferences(prefs: Partial<NotificationPreferences>): NotificationPreferences {
+  const current = getNotificationPreferences();
+  const updated = { ...current, ...prefs };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('shofi_notification_prefs', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Failed to save notification preferences:', err);
+    }
+  }
+  return updated;
+}
+
 /**
  * Trigger desktop/browser notification
  */
@@ -96,12 +138,15 @@ export function triggerNotification(
   }
 ) {
   if (typeof window === 'undefined') return;
+  const prefs = getNotificationPreferences();
 
-  // Always play message sound
-  playNotificationSound();
+  // Play sound if enabled
+  if (prefs.sound) {
+    playNotificationSound();
+  }
 
-  // If browser notification allowed and document is hidden or user unfocused
-  if (isNotificationSupported() && Notification.permission === 'granted') {
+  // If desktop notifications enabled and permission granted
+  if (prefs.desktop && isNotificationSupported() && Notification.permission === 'granted') {
     try {
       const notif = new Notification(title, {
         body: options?.body || 'New message on Shofi Chat',

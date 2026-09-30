@@ -21,6 +21,8 @@ interface MessageBubbleProps {
   theme?: string;
   onDeleteMessage?: (messageId: string) => void;
   onReplyMessage?: (message: Message) => void;
+  onJumpToMessage?: (messageId: string) => void;
+  isHighlighted?: boolean;
   canDelete?: boolean;
 }
 
@@ -36,6 +38,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   theme = 'emerald',
   onDeleteMessage,
   onReplyMessage,
+  onJumpToMessage,
+  isHighlighted = false,
   canDelete = false,
 }) => {
   const formatTime = (isoString: string) => {
@@ -185,7 +189,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const canDeleteThisMessage = isGroup ? (isSelf || isGroupCreator) : isSelf;
 
   return (
-    <div className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'} my-1 group`}>
+    <div
+      id={`message-${message.id}`}
+      className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'} my-1 group transition-all duration-300 rounded-2xl ${
+        isHighlighted ? 'bg-emerald-500/20 ring-2 ring-emerald-400/80 p-1.5' : ''
+      }`}
+    >
       <div className="flex items-center gap-1.5 max-w-[85%] sm:max-w-[70%]">
         {/* Actions for self (Reply + Delete) */}
         {isSelf && (
@@ -232,12 +241,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          {/* QUOTED REPLY BLOCK */}
+          {/* QUOTED REPLY BLOCK - Clickable to jump to original message */}
           {message.replyTo && message.replyTo.content && (
-            <div className="mb-2 px-2.5 py-1.5 rounded-xl bg-black/30 border-l-2 border-emerald-400 text-left select-none">
-              <span className="font-semibold text-emerald-400 block text-[11px]">
-                {message.replyTo.senderName || 'Replied Message'}
-              </span>
+            <div
+              onClick={() => {
+                if (message.replyTo?.id && onJumpToMessage) {
+                  onJumpToMessage(message.replyTo.id);
+                }
+              }}
+              className="mb-2 px-2.5 py-1.5 rounded-xl bg-black/30 border-l-2 border-emerald-400 text-left select-none cursor-pointer hover:bg-black/50 active:scale-[0.99] transition-all group/reply"
+              title="Click to jump to original message"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-emerald-400 block text-[11px] group-hover/reply:underline">
+                  {message.replyTo.senderName || 'Replied Message'}
+                </span>
+                <span className="text-[9px] text-neutral-400 opacity-70 group-hover/reply:opacity-100">
+                  Jump ↗
+                </span>
+              </div>
               <p className="text-neutral-300 line-clamp-2 text-[11px]">
                 {message.replyTo.content}
               </p>

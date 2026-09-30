@@ -90,7 +90,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showGroupCallModal, setShowGroupCallModal] = useState(false);
   const [showManageMembersModal, setShowManageMembersModal] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  const handleJumpToMessage = (targetMsgId: string) => {
+    if (!targetMsgId) return;
+    const targetElement = document.getElementById(`message-${targetMsgId}`);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(targetMsgId);
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    }
+  };
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -665,6 +678,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 theme={chatTheme}
                 onDeleteMessage={onDeleteMessage ? requestDeleteMessage : undefined}
                 onReplyMessage={(msg) => setReplyingMessage(msg)}
+                onJumpToMessage={handleJumpToMessage}
+                isHighlighted={highlightedMessageId === message.id}
               />
             );
           })
