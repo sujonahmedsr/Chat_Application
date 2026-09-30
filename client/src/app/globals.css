@@ -47,13 +47,25 @@ body {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Audio Player Dark Styling */
+/* Audio Player Dark Styling (sender bubbles) */
+audio.custom-audio-player {
+  filter: invert(1) hue-rotate(180deg);
+}
 audio.custom-audio-player::-webkit-media-controls-panel {
-  background-color: #17171c;
+  background-color: transparent;
 }
 audio.custom-audio-player::-webkit-media-controls-current-time-display,
 audio.custom-audio-player::-webkit-media-controls-time-remaining-display {
   color: #a3a3a3;
+}
+
+/* Audio Player Light Styling (received messages - white bubble) */
+audio.custom-audio-player-light::-webkit-media-controls-panel {
+  background-color: transparent;
+}
+audio.custom-audio-player-light::-webkit-media-controls-current-time-display,
+audio.custom-audio-player-light::-webkit-media-controls-time-remaining-display {
+  color: #525252;
 }
 
 /* Premium Skeleton Shimmer Effect */

@@ -21,8 +21,30 @@ const ICE_SERVERS: RTCConfiguration = {
       username: 'openrelayproject',
       credential: 'openrelayproject',
     },
+    {
+      urls: 'turn:relay1.expressturn.com:3478',
+      username: 'efPGGD7Y4BSTGSXFHJ',
+      credential: 'Bj8bZ0sXfnqJRlUb',
+    },
   ],
   iceCandidatePoolSize: 10,
+};
+
+// Unlock audio playback on mobile browsers (must be called during a user gesture)
+const unlockAudioPlayback = () => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      setTimeout(() => ctx.close().catch(() => {}), 200);
+    }
+  } catch {}
 };
 
 interface UseWebRTCOptions {
@@ -67,14 +89,19 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
     if (typeof window !== 'undefined') {
       const audio = document.createElement('audio');
       audio.autoplay = true;
+      audio.volume = 1;
+      audio.muted = false;
       (audio as any).playsInline = true;
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
       audio.style.position = 'fixed';
-      audio.style.opacity = '0';
+      audio.style.opacity = '0.01';
       audio.style.pointerEvents = 'none';
       audio.style.width = '1px';
       audio.style.height = '1px';
       audio.style.bottom = '0';
       audio.style.right = '0';
+      audio.style.zIndex = '-1';
       document.body.appendChild(audio);
       internalAudioRef.current = audio;
 
