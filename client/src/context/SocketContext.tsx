@@ -60,6 +60,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     newSocket.on('connect', () => {
       console.log('[Socket] Connected to server, id:', newSocket.id);
       setIsConnected(true);
+      newSocket.emit('user:connect', { userId: user.id });
+    });
+
+    newSocket.io.on('reconnect', () => {
+      console.log('[Socket] Reconnected, re-binding user:', user.id);
+      newSocket.emit('user:connect', { userId: user.id });
     });
 
     newSocket.on('disconnect', (reason) => {

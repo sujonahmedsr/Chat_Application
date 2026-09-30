@@ -199,17 +199,22 @@ const registerChatHandlers = (io, socket) => {
         })
         .catch(() => {});
 
-      const messageJSON = message.toJSON();
+      const senderUser = await User.findById(senderId, 'name avatar email');
+      const messageJSON = {
+        ...message.toJSON(),
+        sender: senderUser ? senderUser.toJSON() : null,
+      };
 
-      // Emit to receiver's room
+      // Emit to receiver's personal room
       io.to(`user:${receiverId}`).emit('message:receive', messageJSON);
 
-      // Emit acknowledgment back to sender
+      // Emit acknowledgment back to sender socket
       if (callback) {
         callback({ success: true, message: messageJSON, tempId });
       }
 
-      // Sync across sender's other open tabs
+      // Realtime Sync across sender's other devices/tabs (e.g. mobile <-> desktop)
+      socket.to(`user:${senderId}`).emit('message:receive', messageJSON);
       socket.to(`user:${senderId}`).emit('message:sent-sync', messageJSON);
     } catch (err) {
       console.error('[ChatHandler] Error sending message:', err);

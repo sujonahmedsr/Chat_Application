@@ -181,7 +181,12 @@ const clearGroupMessages = async (req, res, next) => {
     await group.save();
 
     try {
-      getIO().to(`group:${groupId}`).emit('group:messages:cleared', { groupId: String(groupId) });
+      const io = getIO();
+      io.to(`group:${groupId}`).emit('group:messages:cleared', { groupId: String(groupId) });
+      const memberIds = (group.members || []).map((m) => String(m._id || m));
+      memberIds.forEach((mId) => {
+        io.to(`user:${mId}`).emit('group:messages:cleared', { groupId: String(groupId) });
+      });
     } catch (e) {}
 
     return res.status(200).json({
@@ -224,7 +229,12 @@ const deleteGroup = async (req, res, next) => {
     await Group.findByIdAndDelete(groupId);
 
     try {
-      getIO().to(`group:${groupId}`).emit('group:deleted', { groupId: String(groupId) });
+      const io = getIO();
+      io.to(`group:${groupId}`).emit('group:deleted', { groupId: String(groupId) });
+      const memberIds = (group.members || []).map((m) => String(m._id || m));
+      memberIds.forEach((mId) => {
+        io.to(`user:${mId}`).emit('group:deleted', { groupId: String(groupId) });
+      });
     } catch (e) {}
 
     return res.status(200).json({

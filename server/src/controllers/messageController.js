@@ -128,6 +128,16 @@ const markMessagesAsRead = async (req, res, next) => {
       }
     );
 
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${senderId}`).emit('message:read', {
+        readerId: String(currentUserId),
+      });
+      getIO().to(`user:${currentUserId}`).emit('message:read', {
+        readerId: String(currentUserId),
+      });
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       modifiedCount: updateResult.modifiedCount,
@@ -209,6 +219,18 @@ const sendMessage = async (req, res, next) => {
 
     // Asynchronously prune older messages beyond 300
     enforceMessageCap(currentUserId, receiverId);
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      const senderUser = await User.findById(currentUserId, 'name avatar email');
+      const messageJSON = {
+        ...message.toJSON(),
+        sender: senderUser ? senderUser.toJSON() : null,
+      };
+      getIO().to(`user:${receiverId}`).emit('message:receive', messageJSON);
+      getIO().to(`user:${currentUserId}`).emit('message:receive', messageJSON);
+      getIO().to(`user:${currentUserId}`).emit('message:sent-sync', messageJSON);
+    } catch (e) {}
 
     return res.status(201).json({ message: message.toJSON() });
   } catch (error) {
@@ -322,6 +344,26 @@ const deleteMessage = async (req, res, next) => {
         }
       });
     }
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      const io = getIO();
+      if (groupId) {
+        io.to(`group:${groupId}`).emit('message:deleted', {
+          messageId: String(objectId),
+          groupId: String(groupId),
+        });
+      }
+      if (receiverId) {
+        io.to(`user:${receiverId}`).emit('message:deleted', {
+          messageId: String(objectId),
+          senderId: String(senderId || currentUserId),
+        });
+      }
+      io.to(`user:${currentUserId}`).emit('message:deleted', {
+        messageId: String(objectId),
+      });
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,

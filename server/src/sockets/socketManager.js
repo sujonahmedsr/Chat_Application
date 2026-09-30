@@ -59,10 +59,10 @@ const initSocket = (httpServer, clientUrl) => {
     registerChatHandlers(io, socket);
     registerCallHandlers(io, socket);
 
-    // Listen for manual presence events if triggered by client
+    // Listen for manual presence events if triggered by client (e.g. on reconnect or screen wake)
     socket.on('user:connect', ({ userId: uid }) => {
-      if (uid && uid !== socket.userId) {
-        handleUserConnected(io, socket, uid);
+      if (uid) {
+        handleUserConnected(io, socket, String(uid));
       }
     });
 

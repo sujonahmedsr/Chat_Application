@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -31,6 +31,13 @@ import {
   isEncrypted,
 } from '@/lib/crypto';
 
+const extractId = (val: any): string => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return String(val._id || val.id || '');
+  return String(val);
+};
+
 export default function ChatDashboard() {
   const { user: currentUser, loading: authLoading, logout, updateProfile } = useAuth();
   const { socket, onlineUserIds } = useSocket();
@@ -55,6 +62,33 @@ export default function ChatDashboard() {
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [activeToast, setActiveToast] = useState<ToastNotificationData | null>(null);
+
+  // Refs to eliminate stale closures in real-time socket handlers
+  const selectedUserRef = useRef<User | null>(null);
+  const selectedGroupRef = useRef<Group | null>(null);
+  const currentUserRef = useRef<User | null>(null);
+  const usersRef = useRef<User[]>([]);
+  const groupsRef = useRef<Group[]>([]);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    selectedGroupRef.current = selectedGroup;
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   const showNotificationAlert = useCallback((title: string, body: string, onClick?: () => void) => {
     setActiveToast({
@@ -229,11 +263,28 @@ export default function ChatDashboard() {
   const fetchGroups = useCallback(async () => {
     try {
       const data = await apiRequest('/groups');
-      setGroups(data.groups || []);
+      const loadedGroups: Group[] = data.groups || [];
+      setGroups(loadedGroups);
+      if (socket) {
+        loadedGroups.forEach((g) => {
+          const gid = extractId(g.id || (g as any)._id);
+          if (gid) socket.emit('group:join', { groupId: gid });
+        });
+      }
     } catch (err) {
       console.error('Failed to fetch groups:', err);
     }
-  }, []);
+  }, [socket]);
+
+  // Keep socket in sync with all user groups
+  useEffect(() => {
+    if (socket && groups.length > 0) {
+      groups.forEach((g) => {
+        const gid = extractId(g.id || (g as any)._id);
+        if (gid) socket.emit('group:join', { groupId: gid });
+      });
+    }
+  }, [socket, groups]);
 
   useEffect(() => {
     if (currentUser) {
@@ -247,7 +298,8 @@ export default function ChatDashboard() {
   useEffect(() => {
     setUsers((prevUsers) =>
       prevUsers.map((u) => {
-        const isOnline = onlineUserIds.has(u.id);
+        const uid = extractId(u.id || (u as any)._id);
+        const isOnline = onlineUserIds.has(uid);
         return {
           ...u,
           isOnline,
@@ -256,17 +308,16 @@ export default function ChatDashboard() {
       })
     );
 
-    if (selectedUser) {
-      setSelectedUser((prev) => {
-        if (!prev) return null;
-        const isOnline = onlineUserIds.has(prev.id);
-        return {
-          ...prev,
-          isOnline,
-          lastSeen: isOnline ? new Date().toISOString() : prev.lastSeen,
-        };
-      });
-    }
+    setSelectedUser((prev) => {
+      if (!prev) return null;
+      const pid = extractId(prev.id || (prev as any)._id);
+      const isOnline = onlineUserIds.has(pid);
+      return {
+        ...prev,
+        isOnline,
+        lastSeen: isOnline ? new Date().toISOString() : prev.lastSeen,
+      };
+    });
   }, [onlineUserIds]);
 
   // Select 1-to-1 User chat
@@ -400,6 +451,34 @@ export default function ChatDashboard() {
             content,
             replyTo: response.message.replyTo || replyTo,
           };
+
+          // Also update active sidebar item immediately for sender
+          if (selectedUser) {
+            const sId = extractId(selectedUser.id || (selectedUser as any)._id);
+            setUsers((uPrev) => {
+              const updated = uPrev.map((u) =>
+                extractId(u.id || (u as any)._id) === sId
+                  ? { ...u, lastMessage: messageWithPlaintext }
+                  : u
+              );
+              const target = updated.find((u) => extractId(u.id || (u as any)._id) === sId);
+              const others = updated.filter((u) => extractId(u.id || (u as any)._id) !== sId);
+              return target ? [target, ...others] : updated;
+            });
+          } else if (selectedGroup) {
+            const gId = extractId(selectedGroup.id || (selectedGroup as any)._id);
+            setGroups((gPrev) => {
+              const updated = gPrev.map((g) =>
+                extractId(g.id || (g as any)._id) === gId
+                  ? { ...g, lastMessage: messageWithPlaintext }
+                  : g
+              );
+              const target = updated.find((g) => extractId(g.id || (g as any)._id) === gId);
+              const others = updated.filter((g) => extractId(g.id || (g as any)._id) !== gId);
+              return target ? [target, ...others] : updated;
+            });
+          }
+
           return prev.map((m) => (m.id === tempId ? messageWithPlaintext : m));
         });
       }
@@ -488,142 +567,246 @@ export default function ChatDashboard() {
     }
   };
 
-  // Socket event listeners
+  // Socket event listeners (Ref-based for zero stale closures & instantaneous multi-device sync)
   useEffect(() => {
     if (!socket) return;
 
-    // Incoming 1-to-1 message
+    // Incoming 1-to-1 message (handles direct message + cross-device sent sync)
     const handleReceiveMessage = async (message: Message) => {
+      const current = currentUserRef.current;
+      const currentUserIdStr = extractId(current?.id || (current as any)?._id);
+      const selectedUserIdStr = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      const senderIdStr = extractId(message.senderId || (message.sender as any)?._id || (message.sender as any)?.id);
+      const receiverIdStr = extractId(message.receiverId || (message as any)?.receiver?._id || (message as any)?.receiver?.id);
+      const msgIdStr = extractId(message.id || (message as any)._id);
+
+      const isSentByMe = senderIdStr === currentUserIdStr;
+      const otherPartyId = isSentByMe ? receiverIdStr : senderIdStr;
+
       let displayMessage = message;
-      if (message.content && isEncrypted(message.content) && currentUser) {
-        const otherId = message.senderId === currentUser.id ? message.receiverId : message.senderId;
-        const convId = getConversationId(currentUser.id, otherId);
+      if (message.content && isEncrypted(message.content) && current) {
+        const convId = getConversationId(currentUserIdStr, otherPartyId);
         const plain = await decryptMessage(message.content, convId);
         displayMessage = { ...message, content: plain };
       }
 
-      const sender = users.find((u) => u.id === message.senderId);
-      const senderName = sender?.name || 'Someone';
+      const sender = usersRef.current.find((u) => extractId(u.id || (u as any)._id) === senderIdStr);
+      const otherUser = usersRef.current.find((u) => extractId(u.id || (u as any)._id) === otherPartyId);
+      const senderName = sender?.name || (message.sender as any)?.name || 'Someone';
 
       let notifTitle = `New message from ${senderName}`;
       if (message.replyTo) {
         notifTitle = `💬 ${senderName} replied to your message`;
       } else if (
-        currentUser?.username &&
-        displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`)
+        current?.username &&
+        displayMessage.content?.toLowerCase().includes(`@${current.username.toLowerCase()}`)
       ) {
         notifTitle = `📣 ${senderName} mentioned you`;
       }
 
-      if (selectedUser && message.senderId === selectedUser.id) {
-        setMessages((prev) => [...prev, displayMessage]);
-        playNotificationSound();
-        if (
-          message.replyTo ||
-          (currentUser?.username &&
-            displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`))
-        ) {
-          showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note');
+      const isCurrentChatOpen = selectedUserIdStr && selectedUserIdStr === otherPartyId;
+
+      if (isCurrentChatOpen) {
+        setMessages((prev) => {
+          if (msgIdStr && prev.some((m) => extractId(m.id || (m as any)._id) === msgIdStr)) {
+            return prev;
+          }
+          return [...prev, displayMessage];
+        });
+
+        if (!isSentByMe) {
+          playNotificationSound();
+          if (
+            message.replyTo ||
+            (current?.username &&
+              displayMessage.content?.toLowerCase().includes(`@${current.username.toLowerCase()}`))
+          ) {
+            showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note');
+          }
+          socket.emit('message:read', { senderId: otherPartyId });
+          apiRequest(`/messages/${otherPartyId}/read`, { method: 'PUT' }).catch(() => {});
         }
-        socket.emit('message:read', { senderId: selectedUser.id });
-        apiRequest(`/messages/${selectedUser.id}/read`, { method: 'PUT' }).catch(() => {});
-      } else {
-        if (message.messageType !== 'call') {
-          showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note', () => {
-            if (sender) {
-              handleSelectUser(sender);
-            }
-          });
-        }
-        setUsers((prev) =>
-          prev.map((u) => {
-            if (u.id === message.senderId) {
+
+        // Update sidebar users list: bump to top and update lastMessage
+        setUsers((prev) => {
+          const exists = prev.some((u) => extractId(u.id || (u as any)._id) === otherPartyId);
+          if (!exists) {
+            fetchFriends();
+            return prev;
+          }
+          const updated = prev.map((u) => {
+            if (extractId(u.id || (u as any)._id) === otherPartyId) {
               return {
                 ...u,
-                unreadCount: (u.unreadCount || 0) + 1,
+                unreadCount: 0,
                 lastMessage: displayMessage,
               };
             }
             return u;
-          })
-        );
+          });
+          const target = updated.find((u) => extractId(u.id || (u as any)._id) === otherPartyId);
+          const others = updated.filter((u) => extractId(u.id || (u as any)._id) !== otherPartyId);
+          return target ? [target, ...others] : updated;
+        });
+      } else {
+        if (!isSentByMe && message.messageType !== 'call') {
+          showNotificationAlert(notifTitle, displayMessage.content || 'Voice Note', () => {
+            if (otherUser) {
+              handleSelectUser(otherUser);
+            }
+          });
+          playNotificationSound();
+        }
+
+        setUsers((prev) => {
+          const exists = prev.some((u) => extractId(u.id || (u as any)._id) === otherPartyId);
+          if (!exists) {
+            fetchFriends();
+            return prev;
+          }
+          const updated = prev.map((u) => {
+            if (extractId(u.id || (u as any)._id) === otherPartyId) {
+              return {
+                ...u,
+                unreadCount: isSentByMe ? (u.unreadCount || 0) : (u.unreadCount || 0) + 1,
+                lastMessage: displayMessage,
+              };
+            }
+            return u;
+          });
+          const target = updated.find((u) => extractId(u.id || (u as any)._id) === otherPartyId);
+          const others = updated.filter((u) => extractId(u.id || (u as any)._id) !== otherPartyId);
+          return target ? [target, ...others] : updated;
+        });
       }
     };
 
     // Incoming group message
     const handleReceiveGroupMessage = async (message: Message) => {
-      if (message.senderId === currentUser?.id) return;
+      const current = currentUserRef.current;
+      const currentUserIdStr = extractId(current?.id || (current as any)?._id);
+      const selectedGroupIdStr = extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id);
+      const senderIdStr = extractId(message.senderId || (message.sender as any)?._id || (message.sender as any)?.id);
+      const groupIdStr = extractId(message.groupId);
+      const msgIdStr = extractId(message.id || (message as any)._id);
+
+      const isSentByMe = senderIdStr === currentUserIdStr;
 
       let displayMessage = message;
-      if (message.content && isEncrypted(message.content) && currentUser) {
-        const convId = getConversationId(currentUser.id, undefined, message.groupId);
+      if (message.content && isEncrypted(message.content) && current) {
+        const convId = getConversationId(currentUserIdStr, undefined, groupIdStr);
         const plain = await decryptMessage(message.content, convId);
         displayMessage = { ...message, content: plain };
       }
 
-      const group = groups.find((g) => g.id === message.groupId);
+      const group = groupsRef.current.find((g) => extractId(g.id || (g as any)._id) === groupIdStr);
       const groupName = group?.name || 'Group';
 
       let notifTitle = `${groupName} • ${message.sender?.name || 'Member'}`;
       if (message.replyTo) {
         notifTitle = `💬 ${message.sender?.name || 'Member'} replied to you in ${groupName}`;
       } else if (
-        currentUser?.username &&
-        displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`)
+        current?.username &&
+        displayMessage.content?.toLowerCase().includes(`@${current.username.toLowerCase()}`)
       ) {
         notifTitle = `📣 ${message.sender?.name || 'Member'} mentioned you in ${groupName}`;
       }
 
-      if (selectedGroup && message.groupId === selectedGroup.id) {
+      const isCurrentGroupOpen = selectedGroupIdStr && selectedGroupIdStr === groupIdStr;
+
+      if (isCurrentGroupOpen) {
         setMessages((prev) => {
-          if (prev.some((m) => m.id === message.id)) return prev;
+          if (msgIdStr && prev.some((m) => extractId(m.id || (m as any)._id) === msgIdStr)) return prev;
           return [...prev, displayMessage];
         });
-        playNotificationSound();
-        if (
-          message.replyTo ||
-          (currentUser?.username &&
-            displayMessage.content?.toLowerCase().includes(`@${currentUser.username.toLowerCase()}`))
-        ) {
-          showNotificationAlert(notifTitle, displayMessage.content || 'Voice note');
-        }
-      } else {
-        showNotificationAlert(notifTitle, displayMessage.content || 'Voice note', () => {
-          if (group) {
-            handleSelectGroup(group);
+
+        if (!isSentByMe) {
+          playNotificationSound();
+          if (
+            message.replyTo ||
+            (current?.username &&
+              displayMessage.content?.toLowerCase().includes(`@${current.username.toLowerCase()}`))
+          ) {
+            showNotificationAlert(notifTitle, displayMessage.content || 'Voice note');
           }
+        }
+
+        // Update group in sidebar: bump to top and update lastMessage
+        setGroups((prev) => {
+          const exists = prev.some((g) => extractId(g.id || (g as any)._id) === groupIdStr);
+          if (!exists) {
+            fetchGroups();
+            return prev;
+          }
+          const updated = prev.map((g) =>
+            extractId(g.id || (g as any)._id) === groupIdStr ? { ...g, lastMessage: displayMessage } : g
+          );
+          const target = updated.find((g) => extractId(g.id || (g as any)._id) === groupIdStr);
+          const others = updated.filter((g) => extractId(g.id || (g as any)._id) !== groupIdStr);
+          return target ? [target, ...others] : updated;
         });
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.id === message.groupId ? { ...g, lastMessage: displayMessage } : g
-          )
-        );
+      } else {
+        if (!isSentByMe) {
+          showNotificationAlert(notifTitle, displayMessage.content || 'Voice note', () => {
+            if (group) {
+              handleSelectGroup(group);
+            }
+          });
+          playNotificationSound();
+        }
+
+        setGroups((prev) => {
+          const exists = prev.some((g) => extractId(g.id || (g as any)._id) === groupIdStr);
+          if (!exists) {
+            fetchGroups();
+            return prev;
+          }
+          const updated = prev.map((g) =>
+            extractId(g.id || (g as any)._id) === groupIdStr ? { ...g, lastMessage: displayMessage } : g
+          );
+          const target = updated.find((g) => extractId(g.id || (g as any)._id) === groupIdStr);
+          const others = updated.filter((g) => extractId(g.id || (g as any)._id) !== groupIdStr);
+          return target ? [target, ...others] : updated;
+        });
       }
     };
 
     // Message deleted listener
     const handleMessageDeleted = ({ messageId }: { messageId: string }) => {
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      const targetId = extractId(messageId);
+      setMessages((prev) => prev.filter((m) => extractId(m.id || (m as any)._id) !== targetId));
     };
 
     // Friend requests listeners
     const handleFriendRequestReceived = (data: { from: User }) => {
       setPendingRequestsCount((prev) => prev + 1);
+      fetchPendingRequestsCount();
       showNotificationAlert('Friend Request Received', `${data.from.name} sent you a friend request!`, () => {
         setShowFriendModal(true);
       });
     };
 
+    const handleFriendRequestSent = () => {
+      fetchPendingRequestsCount();
+    };
+
     const handleFriendRequestAccepted = (data: { friend: User }) => {
       fetchFriends();
+      fetchPendingRequestsCount();
       showNotificationAlert('Request Accepted', `${data.friend.name} accepted your friend request!`, () => {
         handleSelectUser(data.friend);
       });
     };
 
+    const handleFriendRequestRejected = () => {
+      fetchPendingRequestsCount();
+    };
+
     const handleUnfriended = ({ userId }: { userId: string }) => {
       fetchFriends();
-      if (selectedUser?.id === userId) {
+      const targetUid = extractId(userId);
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === targetUid) {
         setSelectedUser(null);
         setMessages([]);
       }
@@ -631,22 +814,30 @@ export default function ChatDashboard() {
 
     const handleBlocked = ({ userId }: { userId: string }) => {
       fetchFriends();
-      if (selectedUser?.id === userId) {
+      const targetUid = extractId(userId);
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === targetUid) {
         setSelectedUser(null);
         setMessages([]);
       }
     };
 
+    const handleUnblocked = () => {
+      fetchFriends();
+    };
+
     // Delivery confirmation
     const handleMessageDelivered = ({ messageId }: { messageId: string }) => {
+      const targetId = extractId(messageId);
       setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, status: 'delivered' } : m))
+        prev.map((m) => (extractId(m.id || (m as any)._id) === targetId ? { ...m, status: 'delivered' } : m))
       );
     };
 
     // Read receipts update
     const handleMessageRead = ({ readerId }: { readerId: string }) => {
-      if (selectedUser && selectedUser.id === readerId) {
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === extractId(readerId)) {
         setMessages((prev) =>
           prev.map((m) => (m.status !== 'read' ? { ...m, status: 'read' } : m))
         );
@@ -655,13 +846,15 @@ export default function ChatDashboard() {
 
     // 1-to-1 Typing
     const handleRemoteTypingStart = ({ senderId }: { senderId: string }) => {
-      if (selectedUser && selectedUser.id === senderId) {
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === extractId(senderId)) {
         setIsRecipientTyping(true);
       }
     };
 
     const handleRemoteTypingStop = ({ senderId }: { senderId: string }) => {
-      if (selectedUser && selectedUser.id === senderId) {
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === extractId(senderId)) {
         setIsRecipientTyping(false);
       }
     };
@@ -674,35 +867,47 @@ export default function ChatDashboard() {
       groupId: string;
       senderName: string;
     }) => {
-      if (selectedGroup && selectedGroup.id === groupId) {
+      const currentGid = extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id);
+      if (currentGid === extractId(groupId)) {
         setGroupTypingUser(senderName);
       }
     };
 
     const handleGroupTypingStop = ({ groupId }: { groupId: string }) => {
-      if (selectedGroup && selectedGroup.id === groupId) {
+      const currentGid = extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id);
+      if (currentGid === extractId(groupId)) {
         setGroupTypingUser(null);
       }
     };
 
     // Realtime Group Lifecycle Sync (Zero Reload)
     const handleGroupCreated = ({ group }: { group: Group }) => {
-      setGroups((prev) => [group, ...prev.filter((g) => g.id !== group.id)]);
+      const gId = extractId(group.id || (group as any)._id);
+      setGroups((prev) => [group, ...prev.filter((g) => extractId(g.id || (g as any)._id) !== gId)]);
+      if (socket) {
+        socket.emit('group:join', { groupId: gId });
+      }
       showNotificationAlert('New Group Created', `You were added to "${group.name}"`, () => {
         handleSelectGroup(group);
       });
     };
 
     const handleGroupUpdated = ({ group }: { group: Group }) => {
-      setGroups((prev) => prev.map((g) => (g.id === group.id ? group : g)));
-      setSelectedGroup((prev) => (prev?.id === group.id ? group : prev));
+      const gId = extractId(group.id || (group as any)._id);
+      setGroups((prev) => prev.map((g) => (extractId(g.id || (g as any)._id) === gId ? group : g)));
+      setSelectedGroup((prev) => (extractId(prev?.id || (prev as any)?._id) === gId ? group : prev));
+      if (socket) {
+        socket.emit('group:join', { groupId: gId });
+      }
     };
 
     const handleGroupRemoved = ({ groupId }: { groupId: string }) => {
-      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      const targetGid = extractId(groupId);
+      setGroups((prev) => prev.filter((g) => extractId(g.id || (g as any)._id) !== targetGid));
       setSelectedGroup((prev) => {
-        if (prev?.id === groupId) {
+        if (extractId(prev?.id || (prev as any)?._id) === targetGid) {
           setIsMobileChatOpen(false);
+          setMessages([]);
           return null;
         }
         return prev;
@@ -710,10 +915,12 @@ export default function ChatDashboard() {
     };
 
     const handleGroupDeleted = ({ groupId }: { groupId: string }) => {
-      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      const targetGid = extractId(groupId);
+      setGroups((prev) => prev.filter((g) => extractId(g.id || (g as any)._id) !== targetGid));
       setSelectedGroup((prev) => {
-        if (prev?.id === groupId) {
+        if (extractId(prev?.id || (prev as any)?._id) === targetGid) {
           setIsMobileChatOpen(false);
+          setMessages([]);
           return null;
         }
         return prev;
@@ -721,15 +928,25 @@ export default function ChatDashboard() {
     };
 
     const handleGroupMessagesCleared = ({ groupId }: { groupId: string }) => {
-      if (selectedGroup?.id === groupId) {
+      const targetGid = extractId(groupId);
+      const currentGid = extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id);
+      if (currentGid === targetGid) {
         setMessages([]);
       }
+      setGroups((prev) =>
+        prev.map((g) => (extractId(g.id || (g as any)._id) === targetGid ? { ...g, lastMessage: null } : g))
+      );
     };
 
     const handleConversationCleared = ({ peerId }: { peerId: string }) => {
-      if (selectedUser?.id === peerId) {
+      const targetPeerId = extractId(peerId);
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === targetPeerId) {
         setMessages([]);
       }
+      setUsers((prev) =>
+        prev.map((u) => (extractId(u.id || (u as any)._id) === targetPeerId ? { ...u, lastMessage: null } : u))
+      );
     };
 
     const handleAdminBlocked = (data: { message?: string }) => {
@@ -743,12 +960,16 @@ export default function ChatDashboard() {
     };
 
     socket.on('message:receive', handleReceiveMessage);
+    socket.on('message:sent-sync', handleReceiveMessage);
     socket.on('group:message:receive', handleReceiveGroupMessage);
     socket.on('message:deleted', handleMessageDeleted);
     socket.on('friend:request:received', handleFriendRequestReceived);
+    socket.on('friend:request:sent', handleFriendRequestSent);
     socket.on('friend:request:accepted', handleFriendRequestAccepted);
+    socket.on('friend:request:rejected', handleFriendRequestRejected);
     socket.on('friend:unfriended', handleUnfriended);
     socket.on('friend:blocked', handleBlocked);
+    socket.on('friend:unblocked', handleUnblocked);
     socket.on('group:created', handleGroupCreated);
     socket.on('group:updated', handleGroupUpdated);
     socket.on('group:removed', handleGroupRemoved);
@@ -766,12 +987,16 @@ export default function ChatDashboard() {
 
     return () => {
       socket.off('message:receive', handleReceiveMessage);
+      socket.off('message:sent-sync', handleReceiveMessage);
       socket.off('group:message:receive', handleReceiveGroupMessage);
       socket.off('message:deleted', handleMessageDeleted);
       socket.off('friend:request:received', handleFriendRequestReceived);
+      socket.off('friend:request:sent', handleFriendRequestSent);
       socket.off('friend:request:accepted', handleFriendRequestAccepted);
+      socket.off('friend:request:rejected', handleFriendRequestRejected);
       socket.off('friend:unfriended', handleUnfriended);
       socket.off('friend:blocked', handleBlocked);
+      socket.off('friend:unblocked', handleUnblocked);
       socket.off('group:created', handleGroupCreated);
       socket.off('group:updated', handleGroupUpdated);
       socket.off('group:removed', handleGroupRemoved);
@@ -787,7 +1012,7 @@ export default function ChatDashboard() {
       socket.off('group:typing:start', handleGroupTypingStart);
       socket.off('group:typing:stop', handleGroupTypingStop);
     };
-  }, [socket, selectedUser, selectedGroup, currentUser?.id, users, groups, fetchFriends, logout]);
+  }, [socket, fetchFriends, fetchGroups, fetchPendingRequestsCount, logout]);
 
   if (authLoading || !currentUser) {
     return (

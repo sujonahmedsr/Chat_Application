@@ -209,6 +209,9 @@ const sendFriendRequest = async (req, res, next) => {
       getIO().to(`user:${targetUserId}`).emit('friend:request:received', {
         from: currentUser.toJSON(),
       });
+      getIO().to(`user:${currentUserId}`).emit('friend:request:sent', {
+        to: targetUser.toJSON(),
+      });
     } catch (e) {
       // socket might be offline or testing
     }
@@ -260,6 +263,9 @@ const acceptFriendRequest = async (req, res, next) => {
       getIO().to(`user:${fromUserId}`).emit('friend:request:accepted', {
         friend: currentUser.toJSON(),
       });
+      getIO().to(`user:${currentUserId}`).emit('friend:request:accepted', {
+        friend: fromUser.toJSON(),
+      });
     } catch (e) {}
 
     return res.status(200).json({
@@ -286,6 +292,16 @@ const rejectFriendRequest = async (req, res, next) => {
       $pull: { sentRequests: { to: currentUserId } },
     });
 
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${fromUserId}`).emit('friend:request:rejected', {
+        fromUserId: String(currentUserId),
+      });
+      getIO().to(`user:${currentUserId}`).emit('friend:request:rejected', {
+        fromUserId: String(fromUserId),
+      });
+    } catch (e) {}
+
     return res.status(200).json({ success: true, message: 'Friend request declined' });
   } catch (error) {
     next(error);
@@ -310,6 +326,9 @@ const unfriendUser = async (req, res, next) => {
       const { getIO } = require('../sockets/socketManager');
       getIO().to(`user:${targetUserId}`).emit('friend:unfriended', {
         userId: String(currentUserId),
+      });
+      getIO().to(`user:${currentUserId}`).emit('friend:unfriended', {
+        userId: String(targetUserId),
       });
     } catch (e) {}
 
