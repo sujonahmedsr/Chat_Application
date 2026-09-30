@@ -74,7 +74,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   useEffect(() => {
     if (isNotificationSupported()) {
-      setNotificationStatus(getNotificationPermission());
+      const current = getNotificationPermission();
+      setNotificationStatus(current);
+
+      if (current === 'default') {
+        // Automatically request notification permission on load
+        requestNotificationPermission().then((granted) => {
+          setNotificationStatus(granted ? 'granted' : 'denied');
+          if (granted) {
+            playNotificationSound();
+          }
+        });
+      }
     }
   }, []);
 
@@ -85,7 +96,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
 
     if (notificationStatus === 'granted') {
-      // Test audio chime
       playNotificationSound();
       return;
     }
@@ -151,7 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* Right Action: Three-dot / Profile Settings & Super Admin Shield */}
+          {/* Right Action: Notification Setup, Settings & Super Admin Shield */}
           <div className="flex items-center gap-1 flex-shrink-0">
             {/* Super Admin Shield */}
             {(SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) || currentUser?.role === 'admin') && (
@@ -166,28 +176,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
 
-            {/* Notification Setup Button */}
+            {/* Notification Setup Button (Single smart icon with live status indicator) */}
             <button
-              onClick={onOpenNotificationSetup}
-              className="p-1.5 rounded-xl text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
-              title="Notification Setup"
+              onClick={() => {
+                if (notificationStatus !== 'granted' && isNotificationSupported()) {
+                  requestNotificationPermission().then((granted) => {
+                    setNotificationStatus(granted ? 'granted' : 'denied');
+                    if (granted) playNotificationSound();
+                  });
+                }
+                onOpenNotificationSetup?.();
+              }}
+              className={`p-1.5 rounded-xl transition-colors relative ${
+                notificationStatus === 'granted'
+                  ? 'text-emerald-400 hover:bg-neutral-800'
+                  : 'text-neutral-400 hover:text-amber-400 hover:bg-neutral-800'
+              }`}
+              title={
+                notificationStatus === 'granted'
+                  ? 'Notifications Active (Click to manage)'
+                  : 'Notifications Off (Click to enable)'
+              }
             >
-              <Bell className="w-4 h-4" />
+              {notificationStatus === 'granted' ? (
+                <>
+                  <Bell className="w-4 h-4" />
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                </>
+              ) : (
+                <>
+                  <BellOff className="w-4 h-4 text-neutral-400" />
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                </>
+              )}
             </button>
 
-            {/* Profile Settings Three-Dot Button (Available for everyone) */}
+            {/* Profile Settings (Available for everyone) */}
             <button
               onClick={onOpenSettings}
               className="p-1.5 rounded-xl text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
-              title="Profile & Settings"
+              title="Profile & Storage Settings"
             >
-              <MoreVertical className="w-4 h-4" />
+              <Settings className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* 2. Action Icons Toolbar (tar niche babaki option) */}
-        <div className="flex items-center justify-between px-1 pt-2 border-t border-neutral-800/80 text-neutral-400">
+        {/* 2. Action Icons Toolbar */}
+        <div className="flex items-center justify-between px-2 pt-2 border-t border-neutral-800/80 text-neutral-400">
           <button
             onClick={onOpenFriendModal}
             className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors relative"
@@ -216,30 +252,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Call History"
           >
             <PhoneCall className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onOpenNotificationSetup}
-            className={`p-1.5 rounded-xl transition-colors relative ${
-              notificationStatus === 'granted'
-                ? 'text-emerald-400 hover:bg-neutral-800'
-                : 'hover:text-amber-400 hover:bg-neutral-800'
-            }`}
-            title="Notification Setup"
-          >
-            {notificationStatus === 'granted' ? (
-              <Bell className="w-4 h-4" />
-            ) : (
-              <BellOff className="w-4 h-4 text-neutral-400" />
-            )}
-          </button>
-
-          <button
-            onClick={onOpenSettings}
-            className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
-            title="Profile & Storage Settings"
-          >
-            <Settings className="w-4 h-4" />
           </button>
 
           <button

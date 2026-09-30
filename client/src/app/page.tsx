@@ -66,7 +66,41 @@ export default function ChatDashboard() {
     triggerNotification(title, { body, onClick });
   }, []);
 
+  // Automatic Browser Notification Enable System
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
 
+    const autoEnable = async () => {
+      if (Notification.permission === 'default') {
+        try {
+          const res = await Notification.requestPermission();
+          if (res === 'granted') {
+            playNotificationSound();
+          }
+        } catch (err) {
+          console.debug('[Notification] Auto enable notice:', err);
+        }
+      }
+    };
+
+    // Prompt automatically on mount
+    autoEnable();
+
+    // Fallback: prompt on first user touch/click if browser blocks unprompted requests
+    const onUserInteraction = () => {
+      if (Notification.permission === 'default') {
+        autoEnable();
+      }
+    };
+
+    window.addEventListener('click', onUserInteraction, { once: true, passive: true });
+    window.addEventListener('touchstart', onUserInteraction, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener('click', onUserInteraction);
+      window.removeEventListener('touchstart', onUserInteraction);
+    };
+  }, []);
 
   // Open settings right away if user hasn't completed initial settings setup
   useEffect(() => {
