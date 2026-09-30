@@ -19,6 +19,8 @@ import {
   UserMinus,
   X,
   Reply,
+  Crown,
+  LogOut,
 } from 'lucide-react';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
@@ -364,16 +366,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const currentUserId = String(currentUser?.id || (currentUser as any)?._id || '');
 
-  const groupCreatorId = isGroup && selectedGroup
-    ? String((selectedGroup.creator as any)?._id || selectedGroup.creator || '')
-    : '';
+  const extractId = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    return String(val.id || val._id || '');
+  };
+
+  const groupCreatorId = isGroup && selectedGroup ? extractId(selectedGroup.creator) : '';
+
+  const groupAdminIds = isGroup && selectedGroup
+    ? new Set(
+        [
+          groupCreatorId,
+          ...((selectedGroup.admins || []).map((a: any) => extractId(a))),
+        ].filter(Boolean)
+      )
+    : new Set<string>();
 
   const isGroupCreator = isGroup && Boolean(groupCreatorId && groupCreatorId === currentUserId);
 
-  const isGroupAdmin = isGroup && selectedGroup && (
-    isCurrentUserAdmin ||
-    isGroupCreator ||
-    (selectedGroup.admins || []).some((a: any) => String(a?._id || a?.id || a) === currentUserId)
+  const isGroupAdmin = isGroup && Boolean(
+    isCurrentUserAdmin || isGroupCreator || groupAdminIds.has(currentUserId)
   );
 
   const handleAddMemberToGroup = async (friendId: string) => {
@@ -409,6 +422,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleLeaveGroupAction = () => {
+    if (!selectedGroup || !currentUserId) return;
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Leave Group?',
+      description: `Are you sure you want to leave "${selectedGroup.name}"? You will not receive any further messages from this group.`,
+      confirmText: 'Leave Group',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await apiRequest(`/groups/${selectedGroup.id}/members/${currentUserId}`, {
+            method: 'DELETE',
+          });
+          onGroupUpdated?.({
+            ...selectedGroup,
+            members: (selectedGroup.members || []).filter((m) => extractId(m) !== currentUserId),
+          });
+          onBack?.();
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to leave group');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   return (
@@ -612,23 +655,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                 {isGroup && selectedGroup && (
                   <>
-                    {/* Manage Group Members: Admin & Creator only */}
-                    {isGroupAdmin && (
-                      <button
-                        onClick={() => {
-                          setShowContactMenu(false);
-                          setShowManageMembersModal(true);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
-                      >
-                        <Users className="w-4 h-4 text-emerald-400" />
-                        <span>Manage Members</span>
-                      </button>
-                    )}
-
-                    {/* Clear Messages & Delete Group: Creator ONLY */}
-                    {isGroupCreator && (
+                    {/* Admin Actions: Manage Members, Clear Messages, Delete Group */}
+                    {isGroupAdmin ? (
                       <>
+                        <button
+                          onClick={() => {
+                            setShowContactMenu(false);
+                            setShowManageMembersModal(true);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+                        >
+                          <Users className="w-4 h-4 text-emerald-400" />
+                          <span>Manage Members</span>
+                        </button>
+
                         <button
                           onClick={handleClearGroup}
                           disabled={actionLoading}
@@ -637,6 +677,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <Trash2 className="w-4 h-4 text-amber-400" />
                           <span>Clear Group Messages</span>
                         </button>
+
                         <button
                           onClick={handleDeleteGroupAction}
                           disabled={actionLoading}
@@ -646,12 +687,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <span>Delete Group</span>
                         </button>
                       </>
-                    )}
-
-                    {!isGroupAdmin && (
-                      <div className="px-3 py-2 text-[11px] text-neutral-400">
-                        Group member
-                      </div>
+                    ) : (
+                      /* Regular Member Action: Leave Group */
+                      <button
+                        onClick={handleLeaveGroupAction}
+                        disabled={actionLoading}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-rose-400 hover:bg-neutral-800 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-400" />
+                        <span>Leave Group</span>
+                      </button>
                     )}
                   </>
                 )}
@@ -910,24 +955,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 </h4>
                 <div className="space-y-1.5">
                   {selectedGroup.members?.map((member) => {
-                    const memberId = String(member.id || (member as any)._id);
+                    const memberId = extractId(member);
                     const isMemberCreator = memberId === groupCreatorId;
+                    const isMemberAdmin = isMemberCreator || groupAdminIds.has(memberId);
                     const canRemove =
                       isGroupAdmin &&
                       !isMemberCreator &&
-                      (isGroupCreator || memberId !== currentUserId);
+                      memberId !== currentUserId;
 
                     return (
                       <div
                         key={memberId}
-                        className="flex items-center justify-between p-2 rounded-xl bg-neutral-800/40"
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-800/40 border border-neutral-800/60"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           <Avatar name={member.name} avatar={member.avatar} size="sm" />
-                          <div>
-                            <p className="text-xs font-medium text-white">{member.name}</p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs font-semibold text-white truncate max-w-[150px]">{member.name}</p>
+                              {isMemberCreator ? (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                                  <Crown className="w-2.5 h-2.5 text-amber-400" />
+                                  <span>Admin</span>
+                                </span>
+                              ) : isMemberAdmin ? (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+                                  <span>Admin</span>
+                                </span>
+                              ) : null}
+                            </div>
                             <span className="text-[10px] text-neutral-400">
-                              {isMemberCreator ? 'Group Creator' : 'Member'}
+                              {isMemberCreator ? 'Group Creator & Admin' : isMemberAdmin ? 'Group Admin' : 'Member'}
                             </span>
                           </div>
                         </div>
@@ -936,7 +995,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <button
                             onClick={() => handleRemoveMemberFromGroup(memberId)}
                             disabled={actionLoading}
-                            className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 transition-colors"
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 transition-colors flex-shrink-0"
                             title="Remove member"
                           >
                             <UserMinus className="w-4 h-4" />
@@ -955,7 +1014,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 </h4>
                 {(() => {
                   const existingIds = new Set(
-                    (selectedGroup.members || []).map((m) => String(m.id || (m as any)._id))
+                    (selectedGroup.members || []).map((m) => extractId(m))
                   );
                   const friendsToAdd = availableFriends.filter((f) => !existingIds.has(String(f.id)));
 

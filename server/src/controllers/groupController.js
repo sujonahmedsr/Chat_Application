@@ -33,7 +33,8 @@ const createGroup = async (req, res, next) => {
 
     const populated = await Group.findById(group._id)
       .populate('members', 'name email avatar isOnline lastSeen')
-      .populate('creator', 'name email avatar');
+      .populate('creator', 'name email avatar')
+      .populate('admins', 'name email avatar');
 
     // Create system welcome message in group
     const welcomeMsg = {
@@ -73,6 +74,7 @@ const getUserGroups = async (req, res, next) => {
     const groups = await Group.find(query)
       .populate('members', 'name email avatar isOnline lastSeen')
       .populate('creator', 'name email avatar')
+      .populate('admins', 'name email avatar')
       .sort({ updatedAt: -1 });
 
     const enrichedGroups = await Promise.all(
@@ -81,8 +83,17 @@ const getUserGroups = async (req, res, next) => {
           .populate('senderId', 'name avatar')
           .sort({ timestamp: -1 });
 
+        const grpJson = grp.toJSON();
+        const creatorId = String(grp.creator?._id || grp.creator?.id || grp.creator || '');
+        const adminIds = new Set((grpJson.admins || []).map((a) => String(a?._id || a?.id || a)));
+
+        // If creator is not in admins, add them dynamically
+        if (creatorId && !adminIds.has(creatorId)) {
+          grpJson.admins = [...(grpJson.admins || []), grpJson.creator || creatorId];
+        }
+
         return {
-          ...grp.toJSON(),
+          ...grpJson,
           lastMessage: lastMessage
             ? {
                 ...lastMessage.toJSON(),
@@ -152,9 +163,16 @@ const clearGroupMessages = async (req, res, next) => {
       return res.status(404).json({ message: 'Group not found' });
     }
 
-    const isGroupCreator = String(group.creator) === String(currentUserId);
-    if (!isGroupCreator) {
-      return res.status(403).json({ message: 'Only the group creator can clear group history' });
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+    const creatorId = String(group.creator?._id || group.creator?.id || group.creator || '');
+    const isGroupCreator = creatorId === String(currentUserId);
+    const isGroupAdmin =
+      isSuperAdmin ||
+      isGroupCreator ||
+      (group.admins || []).some((a) => String(a?._id || a?.id || a) === String(currentUserId));
+
+    if (!isGroupAdmin) {
+      return res.status(403).json({ message: 'Only group admins can clear group history' });
     }
 
     await Message.deleteMany({ groupId });
@@ -176,7 +194,7 @@ const clearGroupMessages = async (req, res, next) => {
   }
 };
 
-// Delete entire group (Only Group Creator)
+// Delete entire group (Only Group Admin or Creator)
 const deleteGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
@@ -187,9 +205,16 @@ const deleteGroup = async (req, res, next) => {
       return res.status(404).json({ message: 'Group not found' });
     }
 
-    const isGroupCreator = String(group.creator) === String(currentUserId);
-    if (!isGroupCreator) {
-      return res.status(403).json({ message: 'Only the group creator can delete the group' });
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+    const creatorId = String(group.creator?._id || group.creator?.id || group.creator || '');
+    const isGroupCreator = creatorId === String(currentUserId);
+    const isGroupAdmin =
+      isSuperAdmin ||
+      isGroupCreator ||
+      (group.admins || []).some((a) => String(a?._id || a?.id || a) === String(currentUserId));
+
+    if (!isGroupAdmin) {
+      return res.status(403).json({ message: 'Only group admins can delete the group' });
     }
 
     // Delete all messages associated with this group
@@ -251,7 +276,8 @@ const addGroupMembers = async (req, res, next) => {
 
     const updatedGroup = await Group.findById(groupId)
       .populate('members', 'name email avatar isOnline lastSeen')
-      .populate('creator', 'name email avatar');
+      .populate('creator', 'name email avatar')
+      .populate('admins', 'name email avatar');
 
     const updatedGroupData = updatedGroup.toJSON ? updatedGroup.toJSON() : updatedGroup;
     try {
@@ -272,7 +298,7 @@ const addGroupMembers = async (req, res, next) => {
   }
 };
 
-// Remove member from group (Group Admin or Creator only)
+// Remove member from group (Group Admin or Creator only, or self-leaving)
 const removeGroupMember = async (req, res, next) => {
   try {
     const { groupId, userId } = req.params;
@@ -284,16 +310,20 @@ const removeGroupMember = async (req, res, next) => {
     }
 
     const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+    const creatorId = String(group.creator?._id || group.creator?.id || group.creator || '');
+    const isGroupCreator = creatorId === String(currentUserId);
     const isGroupAdmin =
       isSuperAdmin ||
-      (group.admins || []).some((id) => String(id) === String(currentUserId)) ||
-      String(group.creator) === String(currentUserId);
+      isGroupCreator ||
+      (group.admins || []).some((id) => String(id?._id || id?.id || id) === String(currentUserId));
 
-    if (!isGroupAdmin) {
+    const isSelfLeaving = String(currentUserId) === String(userId);
+
+    if (!isGroupAdmin && !isSelfLeaving) {
       return res.status(403).json({ message: 'Only group admins can remove members' });
     }
 
-    if (String(group.creator) === String(userId)) {
+    if (String(creatorId) === String(userId) && !isSelfLeaving) {
       return res.status(400).json({ message: 'Cannot remove the group creator' });
     }
 
@@ -304,7 +334,8 @@ const removeGroupMember = async (req, res, next) => {
 
     const updatedGroup = await Group.findById(groupId)
       .populate('members', 'name email avatar isOnline lastSeen')
-      .populate('creator', 'name email avatar');
+      .populate('creator', 'name email avatar')
+      .populate('admins', 'name email avatar');
 
     const updatedGroupData = updatedGroup.toJSON ? updatedGroup.toJSON() : updatedGroup;
     try {
@@ -315,7 +346,7 @@ const removeGroupMember = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Member removed successfully',
+      message: isSelfLeaving ? 'You left the group' : 'Member removed successfully',
       group: updatedGroupData,
     });
   } catch (error) {
