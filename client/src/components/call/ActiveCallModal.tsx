@@ -115,7 +115,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         ref={remoteAudioRef as any}
         autoPlay
         playsInline
-        className="hidden"
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          opacity: 0,
+          pointerEvents: 'none',
+          width: '1px',
+          height: '1px',
+          bottom: 0,
+          right: 0,
+        }}
       />
     );
   }
@@ -141,7 +150,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         ref={remoteAudioRef as any}
         autoPlay
         playsInline
-        className="hidden"
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          opacity: 0,
+          pointerEvents: 'none',
+          width: '1px',
+          height: '1px',
+          bottom: 0,
+          right: 0,
+        }}
       />
 
       {/* NON-BLOCKING FLOATING CALL WINDOW */}

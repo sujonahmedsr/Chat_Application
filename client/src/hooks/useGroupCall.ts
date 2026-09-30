@@ -25,7 +25,19 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export const useGroupCall = (currentUserId?: string) => {
@@ -92,10 +104,21 @@ export const useGroupCall = (currentUserId?: string) => {
     if (!audio) {
       audio = document.createElement('audio');
       audio.autoplay = true;
+      (audio as any).playsInline = true;
+      audio.style.position = 'fixed';
+      audio.style.opacity = '0';
+      audio.style.pointerEvents = 'none';
+      audio.style.width = '1px';
+      audio.style.height = '1px';
+      audio.style.bottom = '0';
+      audio.style.right = '0';
       audioElementsRef.current.set(peerId, audio);
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
+    audio.play().catch((err) => {
+      console.warn('[useGroupCall] audio play error:', err);
+    });
   };
 
   // Helper to create and configure a peer connection
@@ -147,7 +170,18 @@ export const useGroupCall = (currentUserId?: string) => {
       cleanupCall();
 
       // Acquire microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
       localStreamRef.current = stream;
 
       setActiveGroupId(groupId);
@@ -179,7 +213,18 @@ export const useGroupCall = (currentUserId?: string) => {
 
       const { groupId, callId, groupName } = incomingGroupCall;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
       localStreamRef.current = stream;
 
       setActiveGroupId(groupId);

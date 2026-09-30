@@ -10,7 +10,19 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 interface UseWebRTCOptions {
@@ -38,6 +50,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const internalAudioRef = useRef<HTMLAudioElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -48,20 +61,58 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
   const callTypeRef = useRef<'audio' | 'video'>('audio');
   const durationRef = useRef<number>(0);
 
+  // Dedicated background audio element to guarantee audio playback across all devices/OS
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      (audio as any).playsInline = true;
+      audio.style.position = 'fixed';
+      audio.style.opacity = '0';
+      audio.style.pointerEvents = 'none';
+      audio.style.width = '1px';
+      audio.style.height = '1px';
+      audio.style.bottom = '0';
+      audio.style.right = '0';
+      document.body.appendChild(audio);
+      internalAudioRef.current = audio;
+
+      return () => {
+        audio.srcObject = null;
+        audio.remove();
+        internalAudioRef.current = null;
+      };
+    }
+  }, []);
+
   useEffect(() => {
     durationRef.current = duration;
   }, [duration]);
 
-  // Synchronize stream with video elements whenever streams update
+  // Synchronize stream with video & audio elements whenever streams update
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {});
     }
   }, [localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteStream) {
+      if (internalAudioRef.current) {
+        internalAudioRef.current.srcObject = remoteStream;
+        internalAudioRef.current.play().catch((err) => {
+          console.warn('[WebRTC] internalAudio play error:', err);
+        });
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.play().catch(() => {});
+      }
+      if (remoteVideoRef.current && callTypeRef.current === 'video') {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.play().catch(() => {});
+      }
     }
   }, [remoteStream]);
 
@@ -89,6 +140,9 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       pcRef.current = null;
     }
 
+    if (internalAudioRef.current) {
+      internalAudioRef.current.srcObject = null;
+    }
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
     }
@@ -133,16 +187,24 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
       // Receive remote stream
       pc.ontrack = (event) => {
-        const stream = event.streams[0];
+        console.log('[WebRTC] ontrack received:', event.track.kind, event.streams);
+        const stream =
+          event.streams && event.streams[0]
+            ? event.streams[0]
+            : new MediaStream([event.track]);
         setRemoteStream(stream);
 
-        if (callTypeRef.current === 'video') {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = stream;
-          }
+        if (internalAudioRef.current) {
+          internalAudioRef.current.srcObject = stream;
+          internalAudioRef.current.play().catch((e) => console.warn('[WebRTC] internalAudio play error:', e));
         }
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = stream;
+          remoteAudioRef.current.play().catch(() => {});
+        }
+        if (callTypeRef.current === 'video' && remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch(() => {});
         }
       };
 
@@ -174,9 +236,18 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
         stopSoundRef.current = sounds.playOutgoingRingtone();
 
-        // Get user media
-        const constraints = {
-          audio: true,
+        // Warm up background audio player on user gesture
+        if (internalAudioRef.current) {
+          internalAudioRef.current.play().catch(() => {});
+        }
+
+        // Get user media with enhanced voice clarity constraints
+        const constraints: MediaStreamConstraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
           video:
             type === 'video'
               ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
@@ -184,8 +255,12 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream.getAudioTracks().forEach((track) => {
+          track.enabled = true;
+        });
         localStreamRef.current = stream;
         setLocalStream(stream);
+        setIsMuted(false);
 
         const pc = createPeerConnection(targetUser.id);
 
@@ -219,6 +294,11 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
         stopSoundRef.current = null;
       }
 
+      // Warm up background audio player on user gesture
+      if (internalAudioRef.current) {
+        internalAudioRef.current.play().catch(() => {});
+      }
+
       const type = incomingCall.callType || 'audio';
       const peer = {
         id: incomingCall.from,
@@ -236,8 +316,12 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       setPeerUser(peer);
       targetUserIdRef.current = callerFrom;
 
-      const constraints = {
-        audio: true,
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
         video:
           type === 'video'
             ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
@@ -245,8 +329,12 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setIsMuted(false);
 
       const pc = createPeerConnection(callerFrom);
 
