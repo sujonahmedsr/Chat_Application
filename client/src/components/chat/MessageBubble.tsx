@@ -268,18 +268,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* AUDIO / VOICE NOTE ATTACHMENT */}
           {message.messageType === 'audio' && message.fileUrl && (
-            <div className="mb-1 flex items-center gap-3 bg-zinc-900/60 backdrop-blur-md px-3 py-2 rounded-2xl border border-white/10 shadow-sm hover:border-white/15 transition-all select-none w-fit">
-  <div className="flex items-center justify-center p-2 rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30">
-    <Mic className="w-4 h-4 shrink-0" />
-  </div>
-  <audio
-    controls
-    controlsList="nodownload noplaybackrate"
-    onContextMenu={(e) => e.preventDefault()}
-    src={message.fileUrl}
-    className="h-8 w-full max-w-[210px] sm:max-w-[260px] custom-audio-player focus:outline-none"
-  />
-</div>
+            <div className="mb-1 flex items-center gap-2 bg-black/25 p-2 rounded-xl border border-white/5 select-none">
+              <div className="p-2 rounded-full bg-emerald-500/20 text-emerald-300">
+                <Mic className="w-4 h-4" />
+              </div>
+              <audio
+                controls
+                controlsList="nodownload noplaybackrate"
+                onContextMenu={(e) => e.preventDefault()}
+                src={message.fileUrl}
+                className="h-8 max-w-[210px] sm:max-w-[260px] custom-audio-player"
+              />
+            </div>
           )}
 
           {/* TEXT CONTENT */}
