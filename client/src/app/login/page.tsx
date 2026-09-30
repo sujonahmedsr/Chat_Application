@@ -1,173 +1,184 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { MessageSquare, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
+import { MessageSquare, ShieldCheck, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiRequest } from '@/lib/api';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [allowDummyUsers, setAllowDummyUsers] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setError('Please fill in both email and password');
-      return;
+  // Check URL query parameters for errors (?error=...)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      if (err) {
+        setError(err.replace(/_/g, ' '));
+        window.history.replaceState({}, '', '/login');
+      }
     }
+  }, []);
 
+  // Check public settings from server (dummy users toggle)
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await apiRequest('/auth/settings');
+        setAllowDummyUsers(!!data.allowDummyUsers);
+      } catch {
+        setAllowDummyUsers(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // Direct Google OAuth 2.0 Flow
+  const handleDirectGoogleLogin = async () => {
     try {
-      setError('');
       setSubmitting(true);
-      await login(email, password);
-      router.push('/');
+      setError('');
+
+      // Check backend for Direct Google OAuth 2.0 URL
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const data = await apiRequest(`/auth/google/url${currentOrigin ? `?client_url=${encodeURIComponent(currentOrigin)}` : ''}`);
+      if (data.hasClientId && data.url) {
+        // Direct redirect to Google's official login page!
+        window.location.href = data.url;
+        return;
+      }
+
+      // If GOOGLE_CLIENT_ID is not configured in server/.env:
+      setError('গুগল লগইন চালু করতে server/.env ফাইলে GOOGLE_CLIENT_ID এবং GOOGLE_CLIENT_SECRET বসিয়ে সেভ করুন।');
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check credentials.');
+      setError(err.message || 'Failed to initiate Google sign-in');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Subtle background glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 relative overflow-hidden select-none">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-md bg-neutral-900/90 border border-neutral-800 rounded-3xl p-8 shadow-2xl backdrop-blur-xl relative z-10">
-        {/* App Logo */}
+        {/* App Logo & Header */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10">
-            <MessageSquare className="w-7 h-7" />
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-xl shadow-emerald-500/10 ring-1 ring-emerald-500/20">
+            <MessageSquare className="w-8 h-8 stroke-[1.8]" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Welcome to Shofi Chat
           </h1>
-          <p className="text-sm text-neutral-400 mt-1">
-            Sign in to access your chats, groups, and WebRTC audio & video calls
+          <p className="text-sm text-neutral-400 mt-1 max-w-xs leading-relaxed">
+            Real-time messaging, group channels & WebRTC calls. Direct Google Authentication.
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center font-medium animate-in fade-in">
-            {error}
+          <div className="mb-6 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center font-medium flex items-center gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1 text-left">{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Email Address
-            </label>
-            <div className="relative flex items-center bg-neutral-800/80 border border-neutral-700/60 rounded-xl px-3.5 py-2.5 focus-within:border-emerald-500/80 transition-all">
-              <Mail className="w-4 h-4 text-neutral-400 mr-2.5 flex-shrink-0" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="alice@example.com"
-                className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Password
-            </label>
-            <div className="relative flex items-center bg-neutral-800/80 border border-neutral-700/60 rounded-xl px-3.5 py-2.5 focus-within:border-emerald-500/80 transition-all">
-              <Lock className="w-4 h-4 text-neutral-400 mr-2.5 flex-shrink-0" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
+        {/* PRIMARY DIRECT GOOGLE LOGIN BUTTON */}
+        <div className="space-y-4">
           <button
-            type="submit"
+            onClick={handleDirectGoogleLogin}
             disabled={submitting}
-            className="w-full mt-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.99]"
+            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-neutral-100 text-neutral-900 font-semibold text-sm flex items-center justify-center gap-3 shadow-lg shadow-black/30 transition-all active:scale-[0.99] border border-neutral-200"
           >
             {submitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Signing in...</span>
+                <Loader2 className="w-5 h-5 animate-spin text-neutral-700" />
+                <span>Redirecting to Google...</span>
               </>
             ) : (
               <>
-                <span>Sign In</span>
-                <ArrowRight className="w-4 h-4" />
+                {/* Official Google 'G' icon */}
+                <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.675-5.17 3.675-9.15z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.15C3.26 21.36 7.33 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.27 14.24c-.25-.72-.39-1.49-.39-2.24s.14-1.52.39-2.24V6.61H1.28C.46 8.23 0 10.06 0 12s.46 3.77 1.28 5.39l3.99-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.28 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
+                  />
+                </svg>
+                <span>Continue with Google</span>
               </>
             )}
           </button>
-        </form>
 
-        {/* Demo Quick Logins */}
-        <div className="mt-6 pt-5 border-t border-neutral-800 text-center">
-          <p className="text-xs text-neutral-400 mb-2.5">
-            Quick 1-Click Demo Logins:
-          </p>
-          <div className="flex gap-2 justify-center">
-            <button
-              type="button"
-              onClick={async () => {
-                setEmail('alice@example.com');
-                setPassword('password123');
-                setSubmitting(true);
-                try {
-                  await login('alice@example.com', 'password123');
-                  router.push('/');
-                } catch (err: any) {
-                  setError(err.message);
-                } finally {
-                  setSubmitting(false);
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
-            >
-              👩 Alice (User 1)
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                setEmail('bob@example.com');
-                setPassword('password123');
-                setSubmitting(true);
-                try {
-                  await login('bob@example.com', 'password123');
-                  router.push('/');
-                } catch (err: any) {
-                  setError(err.message);
-                } finally {
-                  setSubmitting(false);
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
-            >
-              👨 Bob (User 2)
-            </button>
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Direct Google OAuth 2.0 Security • Auto profile sync</span>
           </div>
         </div>
 
-        <div className="mt-6 text-center text-xs text-neutral-400">
-          Don't have an account?{' '}
-          <Link
-            href="/register"
-            className="text-emerald-400 hover:text-emerald-300 font-medium hover:underline ml-1"
-          >
-            Create account
-          </Link>
-        </div>
+        {/* DUMMY USERS (ONLY SHOWN IF SUPER ADMIN TURNED ON THE SWITCH) */}
+        {allowDummyUsers && (
+          <div className="mt-6 pt-5 border-t border-neutral-800 text-center animate-in fade-in">
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-semibold mb-3">
+              <Sparkles className="w-3 h-3" />
+              <span>Dummy User Testing Mode Active</span>
+            </div>
+            <div className="flex gap-2 justify-center">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  setSubmitting(true);
+                  try {
+                    await login('alice@example.com', 'password123');
+                    router.push('/');
+                  } catch (err: any) {
+                    setError(err.message);
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
+              >
+                👩 Alice (Demo)
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={async () => {
+                  setSubmitting(true);
+                  try {
+                    await login('bob@example.com', 'password123');
+                    router.push('/');
+                  } catch (err: any) {
+                    setError(err.message);
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
+              >
+                👨 Bob (Demo)
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

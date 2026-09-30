@@ -2,7 +2,9 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username?: string;
   avatar?: string;
+  bio?: string;
   isOnline: boolean;
   lastSeen: string;
   createdAt?: string;
@@ -10,6 +12,11 @@ export interface User {
   isBlockedByAdmin?: boolean;
   unreadCount?: number;
   lastMessage?: Message | null;
+  settings?: {
+    saveChatHistory?: boolean;
+    chatRetentionDays?: number;
+    hasCompletedSetup?: boolean;
+  };
 }
 
 export interface Group {

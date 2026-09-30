@@ -12,24 +12,33 @@ import {
   UserX,
   Ban,
   Check,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
 import { Avatar } from '../ui/Avatar';
 import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
+import { ChatAreaSkeleton } from '../ui/Skeleton';
+import { ConfirmModal } from '../ui/ConfirmModal';
 
 interface ChatAreaProps {
   selectedUser: User | null;
   selectedGroup: Group | null;
   currentUser: User | null;
   messages: Message[];
+  isLoadingMessages?: boolean;
   isRecipientTyping: boolean;
   groupTypingUser?: string | null;
   onSendMessage: (content: string, attachment?: any) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
   onStartCall: (user: User, type: 'audio' | 'video') => void;
+  onDeleteMessage?: (messageId: string) => void;
+  onClearHistory?: () => void;
+  onClearGroupMessages?: (groupId: string) => void;
+  onDeleteGroup?: (groupId: string) => void;
   onBack?: () => void;
   onFriendUpdated?: () => void;
 }
@@ -43,17 +52,26 @@ const CHAT_THEMES = [
   { id: 'slate', name: 'Minimal Dark', color: '#475569' },
 ];
 
+const SUPER_ADMINS = [
+  'shofiqul.sujon2201@gmail.com',
+];
+
 export const ChatArea: React.FC<ChatAreaProps> = ({
   selectedUser,
   selectedGroup,
   currentUser,
   messages,
+  isLoadingMessages = false,
   isRecipientTyping,
   groupTypingUser,
   onSendMessage,
   onTypingStart,
   onTypingStop,
   onStartCall,
+  onDeleteMessage,
+  onClearHistory,
+  onClearGroupMessages,
+  onDeleteGroup,
   onBack,
   onFriendUpdated,
 }) => {
@@ -61,6 +79,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showContactMenu, setShowContactMenu] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    confirmText: 'Delete',
+    isDanger: true,
+    onConfirm: () => {},
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load persisted theme
@@ -79,36 +112,135 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setShowThemePicker(false);
   };
 
-  const handleUnfriend = async () => {
+  const handleUnfriend = () => {
     if (!selectedUser) return;
-    if (!confirm(`Are you sure you want to unfriend ${selectedUser.name}?`)) return;
-
-    try {
-      setActionLoading(true);
-      await apiRequest(`/friends/unfriend/${selectedUser.id}`, { method: 'POST' });
-      setShowContactMenu(false);
-      onFriendUpdated?.();
-    } catch (err: any) {
-      alert(err.message || 'Failed to unfriend user');
-    } finally {
-      setActionLoading(false);
-    }
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Friend?',
+      description: `Are you sure you want to unfriend ${selectedUser.name}? You will need to send a new friend request to chat again.`,
+      confirmText: 'Unfriend',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await apiRequest(`/friends/unfriend/${selectedUser.id}`, { method: 'POST' });
+          onFriendUpdated?.();
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to unfriend user');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
-  const handleBlock = async () => {
+  const handleBlock = () => {
     if (!selectedUser) return;
-    if (!confirm(`Block ${selectedUser.name}? You will no longer receive calls or messages from them.`)) return;
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Block User?',
+      description: `Block ${selectedUser.name}? You will no longer receive calls or messages from them.`,
+      confirmText: 'Block User',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await apiRequest(`/friends/block/${selectedUser.id}`, { method: 'POST' });
+          onFriendUpdated?.();
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to block user');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
 
-    try {
-      setActionLoading(true);
-      await apiRequest(`/friends/block/${selectedUser.id}`, { method: 'POST' });
-      setShowContactMenu(false);
-      onFriendUpdated?.();
-    } catch (err: any) {
-      alert(err.message || 'Failed to block user');
-    } finally {
-      setActionLoading(false);
-    }
+  const handleClearChatHistory = () => {
+    if (!selectedUser) return;
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Clear Chat History?',
+      description: `Are you sure you want to clear the entire chat history with ${selectedUser.name}? All messages will be permanently removed for both sides.`,
+      confirmText: 'Clear All',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await onClearHistory?.();
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to clear chat history');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleClearGroup = () => {
+    if (!selectedGroup) return;
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Clear Group Messages?',
+      description: `Are you sure you want to clear all messages in "${selectedGroup.name}"? This action cannot be undone.`,
+      confirmText: 'Clear Messages',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await onClearGroupMessages?.(selectedGroup.id);
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to clear group messages');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteGroupAction = () => {
+    if (!selectedGroup) return;
+    setShowContactMenu(false);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Group Permanently?',
+      description: `PERMANENT ACTION: Delete group "${selectedGroup.name}"? All members and chat history will be permanently deleted.`,
+      confirmText: 'Delete Group',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await onDeleteGroup?.(selectedGroup.id);
+        } catch (err: unknown) {
+          console.error(err instanceof Error ? err.message : 'Failed to delete group');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const requestDeleteMessage = (messageId: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Message?',
+      description: 'Are you sure you want to delete this message? This message will be permanently removed.',
+      confirmText: 'Delete Message',
+      isDanger: true,
+      onConfirm: () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        onDeleteMessage?.(messageId);
+      },
+    });
   };
 
   const scrollToBottom = () => {
@@ -133,7 +265,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </p>
         <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-8">
           <Lock className="w-3.5 h-3.5" />
-          <span>Peer-to-peer WebRTC audio/video & nested MongoDB message storage</span>
+          <span>Google Authenticated • Max 300 messages cap protection</span>
         </div>
       </main>
     );
@@ -156,7 +288,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     const currentId = String(currentUser.id || (currentUser as any)._id || '');
     if (!currentId) return false;
 
-    // 1. Direct senderId
     if (msg.senderId) {
       if (typeof msg.senderId === 'string' && String(msg.senderId) === currentId) {
         return true;
@@ -168,7 +299,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       }
     }
 
-    // 2. Sender object
     if (msg.sender) {
       const s = msg.sender as any;
       const sId = String(s._id || s.id || '');
@@ -178,12 +308,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return false;
   };
 
+  const isCurrentUserAdmin =
+    SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) ||
+    currentUser?.role === 'admin';
+
+  const isGroupAdmin = isGroup && selectedGroup && (
+    isCurrentUserAdmin ||
+    String(selectedGroup.creator) === String(currentUser?.id) ||
+    (selectedGroup.admins || []).map(String).includes(String(currentUser?.id))
+  );
+
   return (
     <main className="flex-1 flex flex-col h-full bg-neutral-950 overflow-hidden relative">
       {/* Chat Header */}
       <header className="px-4 py-3 bg-neutral-900/95 border-b border-neutral-800/80 backdrop-blur-md flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
-          {/* Back button for mobile */}
           {onBack && (
             <button
               onClick={onBack}
@@ -241,12 +380,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             className="p-2 rounded-xl text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors"
             title="Chat Color Theme"
           >
-            <Palette className="w-4.5 h-4.5" />
+            <Palette className="w-4 h-4" />
           </button>
 
           {/* Theme Picker Dropdown */}
           {showThemePicker && (
-            <div className="absolute right-12 top-11 bg-neutral-900 border border-neutral-750 rounded-2xl p-2.5 shadow-2xl z-30 w-48 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute right-12 top-11 bg-neutral-900 border border-neutral-800 rounded-2xl p-2.5 shadow-2xl z-30 w-48 animate-in fade-in zoom-in-95 duration-150">
               <span className="text-[11px] font-semibold text-neutral-400 block px-2 mb-1.5">
                 Chat Theme Color
               </span>
@@ -271,7 +410,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           )}
 
-          {/* 1-to-1 Calling Actions */}
+          {/* GROUP CALL ACTIONS: Group video call OFF, only group audio call! */}
+          {isGroup && (
+            <button
+              onClick={() => {
+                if (selectedGroup.members && selectedGroup.members.length > 0) {
+                  const target = selectedGroup.members.find((m) => String(m.id) !== String(currentUser?.id));
+                  if (target) {
+                    onStartCall(target, 'audio');
+                  } else {
+                    console.warn('No other members to call in this group');
+                  }
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-500/30 transition-all text-xs font-medium active:scale-95 shadow-sm"
+              title="Start Group Audio Call (Group Video Disabled)"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Audio Call</span>
+            </button>
+          )}
+
+          {/* 1-to-1 CALL ACTIONS: Audio & Video calls */}
           {!isGroup && selectedUser && (
             <>
               {/* Audio Call */}
@@ -293,19 +453,31 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <Video className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Video</span>
               </button>
+            </>
+          )}
 
-              {/* Contact Options: Unfriend / Block */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowContactMenu((prev) => !prev)}
-                  className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-                  title="Contact options"
-                >
-                  <MoreVertical className="w-4.5 h-4.5" />
-                </button>
+          {/* Options Dropdown (1-to-1: Clear Chat / Unfriend / Block | Group: Clear Group Messages / Delete Group) */}
+          <div className="relative">
+            <button
+              onClick={() => setShowContactMenu((prev) => !prev)}
+              className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              title="Options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
 
-                {showContactMenu && (
-                  <div className="absolute right-0 top-9 bg-neutral-900 border border-neutral-750 rounded-2xl p-1.5 shadow-2xl z-30 w-44 animate-in fade-in zoom-in-95 duration-150">
+            {showContactMenu && (
+              <div className="absolute right-0 top-9 bg-neutral-900 border border-neutral-800 rounded-2xl p-1.5 shadow-2xl z-30 w-48 animate-in fade-in zoom-in-95 duration-150">
+                {!isGroup && selectedUser && (
+                  <>
+                    <button
+                      onClick={handleClearChatHistory}
+                      disabled={actionLoading}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-rose-400 hover:bg-neutral-800 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-400" />
+                      <span>Clear Chat History</span>
+                    </button>
                     <button
                       onClick={handleUnfriend}
                       disabled={actionLoading}
@@ -322,55 +494,87 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <Ban className="w-4 h-4 text-red-400" />
                       <span>Block User</span>
                     </button>
-                  </div>
+                  </>
+                )}
+
+                {isGroup && selectedGroup && (
+                  <>
+                    {isGroupAdmin ? (
+                      <>
+                        <button
+                          onClick={handleClearGroup}
+                          disabled={actionLoading}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-amber-400 hover:bg-neutral-800 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-amber-400" />
+                          <span>Clear Group Messages</span>
+                        </button>
+                        <button
+                          onClick={handleDeleteGroupAction}
+                          disabled={actionLoading}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-rose-400 hover:bg-neutral-800 transition-colors"
+                        >
+                          <AlertTriangle className="w-4 h-4 text-rose-400" />
+                          <span>Delete Group</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="px-3 py-2 text-[11px] text-neutral-400">
+                        Group admin controls only
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 relative bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px] bg-neutral-950">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <p className="text-xs text-neutral-400">
-              {isGroup
-                ? `Welcome to ${selectedGroup.name}! Say hi to the team! 👋`
-                : `No messages here yet. Say hello to ${selectedUser?.name}! 👋`}
-            </p>
+      <div className="flex-1 overflow-y-auto px-4 py-3 custom-scrollbar">
+        {isLoadingMessages ? (
+          <ChatAreaSkeleton />
+        ) : messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-neutral-500">
+            <p className="text-xs">No messages yet. Say hello! 👋</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              isSelf={checkIsSelf(msg)}
-              isGroup={isGroup}
-              theme={chatTheme}
-            />
-          ))
+          messages.map((message) => {
+            const isSelf = checkIsSelf(message);
+            return (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isSelf={isSelf}
+                isGroup={isGroup}
+                theme={chatTheme}
+                onDeleteMessage={onDeleteMessage ? requestDeleteMessage : undefined}
+                canDelete={isCurrentUserAdmin || (isGroup && isGroupAdmin)}
+              />
+            );
+          })
         )}
-
-        {/* Typing indicator bubble */}
-        {(isRecipientTyping || groupTypingUser) && (
-          <div className="flex justify-start my-1">
-            <div className="bg-neutral-850 border border-neutral-750 rounded-2xl px-3 py-2 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" />
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input Bar */}
+      {/* Message Input Footer */}
       <MessageInput
         onSendMessage={onSendMessage}
         onTypingStart={onTypingStart}
         onTypingStop={onTypingStop}
+      />
+
+      {/* Sleek Delete / Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        isDanger={confirmDialog.isDanger}
+        isLoading={actionLoading}
+        onConfirm={confirmDialog.onConfirm}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
     </main>
   );

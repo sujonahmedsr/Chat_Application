@@ -12,16 +12,23 @@ import {
   BellOff,
   UserCheck,
   ShieldAlert,
+  Settings,
+  MoreVertical,
 } from 'lucide-react';
 import { User, Group } from '@/types';
 import { Avatar } from '../ui/Avatar';
 import { UserItem } from './UserItem';
+import { SidebarSkeleton } from '../ui/Skeleton';
 import {
   isNotificationSupported,
   getNotificationPermission,
   requestNotificationPermission,
   playNotificationSound,
 } from '@/lib/notification';
+
+const SUPER_ADMINS = [
+  'shofiqul.sujon2201@gmail.com',
+];
 
 interface SidebarProps {
   currentUser: User | null;
@@ -36,6 +43,7 @@ interface SidebarProps {
   onOpenCreateGroup: () => void;
   onOpenFriendModal: () => void;
   onOpenAdminModal?: () => void;
+  onOpenSettings?: () => void;
   pendingRequestsCount: number;
   isLoadingUsers: boolean;
 }
@@ -53,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCreateGroup,
   onOpenFriendModal,
   onOpenAdminModal,
+  onOpenSettings,
   pendingRequestsCount,
   isLoadingUsers,
 }) => {
@@ -68,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleToggleNotification = async () => {
     if (!isNotificationSupported()) {
-      alert('Desktop notifications are not supported in this browser.');
+      console.warn('Desktop notifications are not supported in this browser.');
       return;
     }
 
@@ -97,109 +106,146 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="w-full md:w-80 lg:w-96 flex-shrink-0 flex flex-col h-full bg-neutral-900 border-r border-neutral-800">
-      {/* Top Header */}
-      <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Avatar
-            name={currentUser?.name || 'User'}
-            avatar={currentUser?.avatar}
-            size="md"
-            isOnline={true}
-            showStatus={true}
-          />
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-white truncate">
-              {currentUser?.name}
-            </h2>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="text-xs text-emerald-400 font-medium">Online</p>
+      {/* Top Header Card */}
+      <div className="p-3.5 border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-sm space-y-3">
+        {/* 1. Main Profile Row (Clickable to open Settings for everyone) */}
+        <div className="flex items-center justify-between gap-2">
+          <div
+            onClick={onOpenSettings}
+            className="flex items-center gap-3 cursor-pointer group flex-1 min-w-0"
+            title="Click to view & edit Profile"
+          >
+            <div className="relative flex-shrink-0">
+              <Avatar
+                name={currentUser?.name || 'User'}
+                avatar={currentUser?.avatar}
+                size="md"
+                isOnline={true}
+                showStatus={true}
+              />
+              <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px]">
+                <Settings className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
             </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-white truncate group-hover:text-emerald-400 transition-colors">
+                  {currentUser?.name || 'User'}
+                </h2>
+                {(SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) || currentUser?.role === 'admin') && (
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex-shrink-0">
+                    Admin
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                <p className="text-xs text-neutral-400 truncate">
+                  {currentUser?.username ? `@${currentUser.username}` : (currentUser?.bio || 'Online')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Action: Three-dot / Profile Settings & Super Admin Shield */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Super Admin Shield */}
+            {(SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) || currentUser?.role === 'admin') && (
+              <button
+                onClick={onOpenAdminModal}
+                className="p-1.5 rounded-xl text-amber-400 hover:bg-neutral-800 transition-colors relative"
+                title="Super Admin Dashboard"
+              >
+                <ShieldAlert className="w-4 h-4" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full" />
+              </button>
+            )}
+
+            {/* Profile Settings Three-Dot Button (Available for everyone) */}
+            <button
+              onClick={onOpenSettings}
+              className="p-1.5 rounded-xl text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+              title="Profile & Settings"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Action icons */}
-        <div className="flex items-center gap-0.5 text-neutral-400">
-          {/* Notifications toggle */}
+        {/* 2. Action Icons Toolbar (tar niche babaki option) */}
+        <div className="flex items-center justify-between px-1 pt-2 border-t border-neutral-800/80 text-neutral-400">
+          <button
+            onClick={onOpenFriendModal}
+            className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors relative"
+            title="Friends & Add Contacts"
+          >
+            <UserCheck className="w-4 h-4" />
+            {pendingRequestsCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-neutral-900 animate-ping" />
+            )}
+            {pendingRequestsCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-neutral-900" />
+            )}
+          </button>
+
+          <button
+            onClick={onOpenCreateGroup}
+            className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+            title="Create New Group"
+          >
+            <Users className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onOpenCallLogs}
+            className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+            title="Call History"
+          >
+            <PhoneCall className="w-4 h-4" />
+          </button>
+
           <button
             onClick={handleToggleNotification}
-            className={`p-2 rounded-xl transition-colors relative ${
+            className={`p-1.5 rounded-xl transition-colors relative ${
               notificationStatus === 'granted'
                 ? 'text-emerald-400 hover:bg-neutral-800'
                 : 'hover:text-amber-400 hover:bg-neutral-800'
             }`}
             title={
               notificationStatus === 'granted'
-                ? 'Notifications Enabled (Click to test sound)'
-                : 'Enable Browser & Sound Notifications'
+                ? 'Notifications Enabled'
+                : 'Enable Browser Notifications'
             }
           >
             {notificationStatus === 'granted' ? (
-              <Bell className="w-4.5 h-4.5" />
+              <Bell className="w-4 h-4" />
             ) : (
-              <BellOff className="w-4.5 h-4.5 text-neutral-400" />
+              <BellOff className="w-4 h-4 text-neutral-400" />
             )}
           </button>
 
-          {/* Friends & Requests Modal */}
           <button
-            onClick={onOpenFriendModal}
-            className="p-2 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors relative"
-            title="Friends & Add Contacts"
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+            title="Profile & Storage Settings"
           >
-            <UserCheck className="w-4.5 h-4.5" />
-            {pendingRequestsCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-neutral-900 animate-ping" />
-            )}
-            {pendingRequestsCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-neutral-900" />
-            )}
+            <Settings className="w-4 h-4" />
           </button>
 
-          {/* Create Group */}
-          <button
-            onClick={onOpenCreateGroup}
-            className="p-2 rounded-xl hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
-            title="Create New Group"
-          >
-            <Users className="w-4.5 h-4.5" />
-          </button>
-
-          {/* Super Admin Control Panel */}
-          {(currentUser?.email === 'shofi@gmail.com' || currentUser?.role === 'admin') && (
-            <button
-              onClick={onOpenAdminModal}
-              className="p-2 rounded-xl text-amber-400 hover:bg-neutral-800 transition-colors relative"
-              title="Super Admin Dashboard"
-            >
-              <ShieldAlert className="w-4.5 h-4.5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full animate-ping" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
-            </button>
-          )}
-
-          {/* Call History */}
-          <button
-            onClick={onOpenCallLogs}
-            className="p-2 rounded-xl hover:text-white hover:bg-neutral-800 transition-colors"
-            title="Call History"
-          >
-            <PhoneCall className="w-4.5 h-4.5" />
-          </button>
-
-          {/* Logout */}
           <button
             onClick={onLogout}
-            className="p-2 rounded-xl hover:text-red-400 hover:bg-neutral-800 transition-colors"
+            className="p-1.5 rounded-xl hover:text-red-400 hover:bg-neutral-800 transition-colors"
             title="Logout"
           >
-            <LogOut className="w-4.5 h-4.5" />
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Tabs: Direct Chats (Friends) vs Groups */}
-      <div className="flex p-1.5 mx-3 mt-3 bg-neutral-850 rounded-xl border border-neutral-800">
+      <div className="flex p-1.5 mx-3 mt-3 bg-neutral-900 rounded-xl border border-neutral-800">
         <button
           onClick={() => setActiveTab('chats')}
           className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
@@ -247,12 +293,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Main List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
         {isLoadingUsers ? (
-          <div className="flex flex-col items-center justify-center h-48 text-neutral-400 text-xs">
-            <span className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2" />
-            Loading friends...
-          </div>
+          <SidebarSkeleton />
         ) : activeTab === 'chats' ? (
           filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-56 text-neutral-400 text-center px-4">

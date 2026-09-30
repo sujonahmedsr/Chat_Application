@@ -69,7 +69,7 @@ export const UserItem: React.FC<UserItemProps> = ({
             <span className="font-medium text-sm text-neutral-100 truncate">
               {user.name}
             </span>
-            {(user.email === 'shofi@gmail.com' || (user as any).role === 'admin') && (
+            {(['shofiqul.sujon2201@gmail.com'].includes((user.email || '').toLowerCase()) || user.role === 'admin') && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex-shrink-0">
                 Admin
               </span>
@@ -93,7 +93,7 @@ export const UserItem: React.FC<UserItemProps> = ({
 
           {/* Unread badge */}
           {user.unreadCount && user.unreadCount > 0 ? (
-            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-neutral-950 font-bold text-[11px] flex-shrink-0 shadow-sm animate-pulse">
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-neutral-950 font-bold text-[11px] flex-shrink-0 shadow-sm animate-pulse">
               {user.unreadCount}
             </span>
           ) : null}

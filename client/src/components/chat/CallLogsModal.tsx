@@ -97,7 +97,7 @@ export const CallLogsModal: React.FC<CallLogsModalProps> = ({
               return (
                 <div
                   key={log.id}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-neutral-850 hover:bg-neutral-800/80 border border-neutral-800/60 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-2xl bg-neutral-900 hover:bg-neutral-800/80 border border-neutral-800/60 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <Avatar name={peer.name} avatar={peer.avatar} size="md" />

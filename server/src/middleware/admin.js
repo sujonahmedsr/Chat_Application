@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { isSuperAdminEmail } = require('../utils/superAdmin');
 
 const requireAdmin = async (req, res, next) => {
   try {
@@ -11,7 +12,7 @@ const requireAdmin = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const isSuperAdmin = user.email === 'shofi@gmail.com' || user.role === 'admin';
+    const isSuperAdmin = isSuperAdminEmail(user.email) || user.role === 'admin';
     if (!isSuperAdmin) {
       return res.status(403).json({ message: 'Access denied: Super Admin privileges required' });
     }

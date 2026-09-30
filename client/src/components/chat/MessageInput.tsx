@@ -121,8 +121,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      console.error('Failed to access microphone for voice recording:', err);
-      alert('Microphone permission required to record audio voice notes.');
+      console.warn('Microphone permission required to record audio voice notes:', err);
     }
   };
 
@@ -184,7 +183,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     <div className="relative p-3 bg-neutral-900 border-t border-neutral-800">
       {/* EMOJI PICKER POPUP */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-3 bg-neutral-900 border border-neutral-750 rounded-2xl p-3 shadow-2xl z-30 w-72 sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="absolute bottom-16 left-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 shadow-2xl z-30 w-72 sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-800">
             <span className="text-xs font-semibold text-neutral-300">Emojis</span>
             <button
@@ -222,7 +221,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       {/* VOICE RECORDING OVERLAY */}
       {isRecording ? (
-        <div className="flex items-center justify-between bg-neutral-850 border border-emerald-500/40 rounded-2xl px-4 py-2.5 animate-pulse">
+        <div className="flex items-center justify-between bg-neutral-900 border border-emerald-500/40 rounded-2xl px-4 py-2.5 animate-pulse">
           <div className="flex items-center gap-3">
             <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
             <span className="text-xs font-mono text-white">Recording Voice Note...</span>
@@ -266,7 +265,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           </button>
 
           {/* Text Area */}
-          <div className="flex-1 bg-neutral-800/90 border border-neutral-750 focus-within:border-emerald-500/80 rounded-2xl px-3 py-2 transition-all">
+          <div className="flex-1 bg-neutral-800/90 border border-neutral-800 focus-within:border-emerald-500/80 rounded-2xl px-3 py-2 transition-all">
             <textarea
               ref={textareaRef}
               value={content}
@@ -292,7 +291,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             <button
               type="button"
               onClick={startRecording}
-              className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-750 text-neutral-300 hover:text-emerald-400 transition-all active:scale-95"
+              className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-emerald-400 transition-all active:scale-95"
               title="Record Voice Note"
             >
               <Mic className="w-5 h-5" />

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -8,7 +8,6 @@ import { useSocket } from '@/context/SocketContext';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
-import { sounds } from '@/lib/sound';
 import { triggerNotification } from '@/lib/notification';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
@@ -18,10 +17,11 @@ import { CallLogsModal } from '@/components/chat/CallLogsModal';
 import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
 import { FriendModal } from '@/components/chat/FriendModal';
 import { AdminModal } from '@/components/admin/AdminModal';
+import { SettingsModal } from '@/components/chat/SettingsModal';
 
 export default function ChatDashboard() {
-  const { user: currentUser, loading: authLoading, logout } = useAuth();
-  const { socket, isConnected, onlineUserIds } = useSocket();
+  const { user: currentUser, loading: authLoading, logout, updateProfile } = useAuth();
+  const { socket, onlineUserIds } = useSocket();
   const router = useRouter();
 
   // State
@@ -31,14 +31,25 @@ export default function ChatDashboard() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isRecipientTyping, setIsRecipientTyping] = useState(false);
   const [groupTypingUser, setGroupTypingUser] = useState<string | null>(null);
   const [showCallLogs, setShowCallLogs] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+
+
+
+  // Open settings right away if user hasn't completed initial settings setup
+  useEffect(() => {
+    if (currentUser && currentUser.settings?.hasCompletedSetup === false) {
+      setShowSettingsModal(true);
+    }
+  }, [currentUser]);
 
   // Automatic Call Log in Conversation Handler
   const handleCallEndedLog = useCallback(
@@ -123,7 +134,7 @@ export default function ChatDashboard() {
       try {
         const fallback = await apiRequest('/users');
         setUsers(fallback.users || []);
-      } catch (e) {}
+      } catch {}
     } finally {
       setIsLoadingUsers(false);
     }
@@ -192,6 +203,7 @@ export default function ChatDashboard() {
     setGroupTypingUser(null);
 
     try {
+      setIsLoadingMessages(true);
       const data = await apiRequest(`/messages/${targetUser.id}`);
       setMessages(data.messages || []);
 
@@ -205,6 +217,8 @@ export default function ChatDashboard() {
       );
     } catch (err) {
       console.error('Failed to load chat history:', err);
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
@@ -217,6 +231,7 @@ export default function ChatDashboard() {
     setGroupTypingUser(null);
 
     try {
+      setIsLoadingMessages(true);
       const data = await apiRequest(`/groups/${group.id}/messages`);
       setMessages(data.messages || []);
 
@@ -225,6 +240,8 @@ export default function ChatDashboard() {
       }
     } catch (err) {
       console.error('Failed to load group messages:', err);
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
@@ -265,11 +282,90 @@ export default function ChatDashboard() {
 
     socket.emit('message:send', payload, (response: any) => {
       if (response?.success && response.message) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? response.message : m))
-        );
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === tempId);
+          if (!exists) {
+            // User deleted it before socket acknowledgment returned!
+            const realId = response.message.id || (response.message as any)._id;
+            if (realId) {
+              apiRequest(`/messages/${realId}`, { method: 'DELETE' }).catch(() => {});
+              if (socket) {
+                socket.emit('message:delete', {
+                  messageId: realId,
+                  receiverId: selectedUser?.id,
+                  groupId: selectedGroup?.id,
+                });
+              }
+            }
+            return prev;
+          }
+          return prev.map((m) => (m.id === tempId ? response.message : m));
+        });
       }
     });
+  };
+
+  // Delete single message
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+      // If it's a temporary optimistic message, no backend call needed
+      if (!messageId || messageId.startsWith('temp_')) {
+        return;
+      }
+
+      apiRequest(`/messages/${messageId}`, { method: 'DELETE' }).catch((err) => {
+        console.warn('[DeleteMessage] HTTP delete notice:', err);
+      });
+
+      if (socket) {
+        socket.emit('message:delete', {
+          messageId,
+          receiverId: selectedUser?.id,
+          groupId: selectedGroup?.id,
+        });
+      }
+    } catch (err: unknown) {
+      console.error('Failed to delete message:', err);
+    }
+  };
+
+  // Clear full 1-to-1 chat history
+  const handleClearHistory = async () => {
+    if (!selectedUser) return;
+    try {
+      setMessages([]);
+      await apiRequest('/messages/clear-history', {
+        method: 'POST',
+        body: JSON.stringify({ peerId: selectedUser.id }),
+      });
+      fetchFriends();
+    } catch (err: unknown) {
+      console.error('Failed to clear chat history:', err);
+    }
+  };
+
+  // Clear group messages (Group Admin)
+  const handleClearGroupMessages = async (groupId: string) => {
+    try {
+      setMessages([]);
+      await apiRequest(`/groups/${groupId}/clear-messages`, { method: 'POST' });
+      fetchGroups();
+    } catch (err: unknown) {
+      console.error('Failed to clear group messages:', err);
+    }
+  };
+
+  // Delete Group (Group Admin)
+  const handleDeleteGroup = async (groupId: string) => {
+    try {
+      await apiRequest(`/groups/${groupId}`, { method: 'DELETE' });
+      setSelectedGroup(null);
+      fetchGroups();
+    } catch (err: unknown) {
+      console.error('Failed to delete group:', err);
+    }
   };
 
   // Typing events
@@ -355,6 +451,11 @@ export default function ChatDashboard() {
       }
     };
 
+    // Message deleted listener
+    const handleMessageDeleted = ({ messageId }: { messageId: string }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    };
+
     // Friend requests listeners
     const handleFriendRequestReceived = (data: { from: User }) => {
       setPendingRequestsCount((prev) => prev + 1);
@@ -433,17 +534,18 @@ export default function ChatDashboard() {
     };
 
     const handleAdminBlocked = (data: { message?: string }) => {
-      alert(data.message || 'Your account has been suspended by an administrator.');
+      console.warn(data.message || 'Your account has been suspended by an administrator.');
       logout();
     };
 
     const handleAdminDeleted = (data: { message?: string }) => {
-      alert(data.message || 'Your account has been deleted by an administrator.');
+      console.warn(data.message || 'Your account has been deleted by an administrator.');
       logout();
     };
 
     socket.on('message:receive', handleReceiveMessage);
     socket.on('group:message:receive', handleReceiveGroupMessage);
+    socket.on('message:deleted', handleMessageDeleted);
     socket.on('friend:request:received', handleFriendRequestReceived);
     socket.on('friend:request:accepted', handleFriendRequestAccepted);
     socket.on('friend:unfriended', handleUnfriended);
@@ -460,6 +562,7 @@ export default function ChatDashboard() {
     return () => {
       socket.off('message:receive', handleReceiveMessage);
       socket.off('group:message:receive', handleReceiveGroupMessage);
+      socket.off('message:deleted', handleMessageDeleted);
       socket.off('friend:request:received', handleFriendRequestReceived);
       socket.off('friend:request:accepted', handleFriendRequestAccepted);
       socket.off('friend:unfriended', handleUnfriended);
@@ -501,6 +604,7 @@ export default function ChatDashboard() {
           onOpenCreateGroup={() => setShowCreateGroup(true)}
           onOpenFriendModal={() => setShowFriendModal(true)}
           onOpenAdminModal={() => setShowAdminModal(true)}
+          onOpenSettings={() => setShowSettingsModal(true)}
           pendingRequestsCount={pendingRequestsCount}
           isLoadingUsers={isLoadingUsers}
         />
@@ -513,12 +617,17 @@ export default function ChatDashboard() {
           selectedGroup={selectedGroup}
           currentUser={currentUser}
           messages={messages}
+          isLoadingMessages={isLoadingMessages}
           isRecipientTyping={isRecipientTyping}
           groupTypingUser={groupTypingUser}
           onSendMessage={handleSendMessage}
           onTypingStart={handleTypingStart}
           onTypingStop={handleTypingStop}
           onStartCall={(target, type) => startCall(target, type)}
+          onDeleteMessage={handleDeleteMessage}
+          onClearHistory={handleClearHistory}
+          onClearGroupMessages={handleClearGroupMessages}
+          onDeleteGroup={handleDeleteGroup}
           onBack={() => setIsMobileChatOpen(false)}
           onFriendUpdated={() => {
             fetchFriends();
@@ -534,7 +643,7 @@ export default function ChatDashboard() {
         onReject={rejectCall}
       />
 
-      {/* Active Call Floating / Video Viewport Modal */}
+      {/* Active Call Non-blocking Draggable Viewport Modal */}
       <ActiveCallModal
         callStatus={callStatus}
         callType={callType}
@@ -586,6 +695,17 @@ export default function ChatDashboard() {
         isOpen={showAdminModal}
         onClose={() => setShowAdminModal(false)}
         onUsersUpdated={fetchFriends}
+        onLogout={logout}
+      />
+
+      {/* Profile & Storage Retention Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        currentUser={currentUser}
+        onSaveProfile={updateProfile}
+        onLogout={logout}
+        isInitialSetup={currentUser.settings?.hasCompletedSetup === false}
       />
     </div>
   );

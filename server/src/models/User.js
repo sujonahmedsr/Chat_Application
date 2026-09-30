@@ -19,11 +19,41 @@ const userSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required: [true, 'Password is required'],
+      default: '',
+    },
+    username: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    googleId: {
+      type: String,
+      default: '',
+      sparse: true,
     },
     avatar: {
       type: String,
       default: '',
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      default: '',
+    },
+    settings: {
+      saveChatHistory: {
+        type: Boolean,
+        default: true,
+      },
+      chatRetentionDays: {
+        type: Number,
+        default: 15,
+      },
+      hasCompletedSetup: {
+        type: Boolean,
+        default: false,
+      },
     },
     isOnline: {
       type: Boolean,
@@ -100,5 +130,12 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({ isOnline: 1 });
 userSchema.index({ friends: 1 });
+
+userSchema.pre('save', function (next) {
+  if (this.email) {
+    this.username = this.email.split('@')[0];
+  }
+  next();
+});
 
 module.exports = mongoose.model('User', userSchema);

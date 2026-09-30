@@ -57,8 +57,8 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       setName('');
       setDescription('');
       setSelectedUserIds([]);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create group');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create group');
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +127,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             <label className="block text-xs font-medium text-neutral-300 mb-2">
               Select Members ({selectedUserIds.length} selected)
             </label>
-            <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl bg-neutral-850/60 p-2 border border-neutral-800">
+            <div className="max-h-48 overflow-y-auto space-y-1 rounded-xl bg-neutral-900/60 p-2 border border-neutral-800">
               {availableUsers.length === 0 ? (
                 <p className="text-xs text-neutral-500 text-center py-4">
                   No other contacts registered yet

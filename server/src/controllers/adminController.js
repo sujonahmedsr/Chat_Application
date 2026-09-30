@@ -1,8 +1,10 @@
 const User = require('../models/User');
 const Group = require('../models/Group');
 const Message = require('../models/Message');
+const SystemSetting = require('../models/SystemSetting');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline, onlineUsers } = require('../sockets/presenceHandler');
+const { isSuperAdminEmail } = require('../utils/superAdmin');
 
 // Get all users with administrative stats
 const getAllUsers = async (req, res, next) => {
@@ -14,6 +16,7 @@ const getAllUsers = async (req, res, next) => {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
+        { username: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -25,9 +28,10 @@ const getAllUsers = async (req, res, next) => {
         id: uId,
         _id: uId,
         name: u.name,
+        username: u.username || '',
         email: u.email,
         avatar: u.avatar,
-        role: u.email === 'shofi@gmail.com' ? 'admin' : (u.role || 'user'),
+        role: isSuperAdminEmail(u.email) ? 'admin' : (u.role || 'user'),
         isBlockedByAdmin: !!u.isBlockedByAdmin,
         isOnline: isUserOnline(uId),
         lastSeen: u.lastSeen,
@@ -40,12 +44,18 @@ const getAllUsers = async (req, res, next) => {
     const onlineCount = enrichedUsers.filter((u) => u.isOnline).length;
     const blockedCount = enrichedUsers.filter((u) => u.isBlockedByAdmin).length;
 
+    // Get current dummy user setting
+    const dummySetting = await SystemSetting.findOne({ key: 'allowDummyUsers' });
+
     return res.status(200).json({
       users: enrichedUsers,
       stats: {
         totalUsers,
         onlineCount,
         blockedCount,
+      },
+      settings: {
+        allowDummyUsers: dummySetting ? !!dummySetting.value : false,
       },
     });
   } catch (err) {
@@ -63,15 +73,15 @@ const toggleBlockUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (targetUser.email === 'shofi@gmail.com') {
-      return res.status(400).json({ message: 'Cannot block the Super Admin account' });
+    if (isSuperAdminEmail(targetUser.email)) {
+      return res.status(400).json({ message: 'Cannot block a Super Admin account' });
     }
 
     const newBlockedState = !targetUser.isBlockedByAdmin;
     targetUser.isBlockedByAdmin = newBlockedState;
     await targetUser.save();
 
-    // If blocked, disconnect their active sockets & alert them
+    // If blocked, disconnect active sockets & alert user
     if (newBlockedState) {
       try {
         const { getIO } = require('../sockets/socketManager');
@@ -80,7 +90,6 @@ const toggleBlockUser = async (req, res, next) => {
           message: 'Your account has been suspended by an administrator.',
         });
 
-        // Disconnect sockets
         const sockets = onlineUsers.get(String(userId));
         if (sockets) {
           sockets.forEach((socketId) => {
@@ -116,8 +125,8 @@ const deleteUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (targetUser.email === 'shofi@gmail.com') {
-      return res.status(400).json({ message: 'Cannot delete the Super Admin account' });
+    if (isSuperAdminEmail(targetUser.email)) {
+      return res.status(400).json({ message: 'Cannot delete a Super Admin account' });
     }
 
     // Disconnect active sockets
@@ -137,7 +146,7 @@ const deleteUser = async (req, res, next) => {
       }
     } catch (e) {}
 
-    // 1. Remove from all other users' friends, friendRequests, sentRequests, blockedUsers
+    // 1. Remove from friends, requests, blocked
     await User.updateMany(
       {},
       {
@@ -178,8 +187,34 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+// Update system setting (e.g. toggle allowDummyUsers)
+const updateSystemSettings = async (req, res, next) => {
+  try {
+    const { allowDummyUsers } = req.body;
+
+    if (allowDummyUsers !== undefined) {
+      await SystemSetting.findOneAndUpdate(
+        { key: 'allowDummyUsers' },
+        { key: 'allowDummyUsers', value: !!allowDummyUsers },
+        { upsert: true, new: true }
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'System settings updated successfully',
+      settings: {
+        allowDummyUsers: !!allowDummyUsers,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAllUsers,
   toggleBlockUser,
   deleteUser,
+  updateSystemSettings,
 };

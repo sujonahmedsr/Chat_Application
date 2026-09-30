@@ -3,6 +3,9 @@ const User = require('../models/User');
 const Group = require('../models/Group');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('./presenceHandler');
+const { isSuperAdminEmail } = require('../utils/superAdmin');
+
+const MAX_SOCKET_MESSAGES = 300;
 
 const registerChatHandlers = (io, socket) => {
   // Join a new group room dynamically
@@ -49,7 +52,7 @@ const registerChatHandlers = (io, socket) => {
       if (receiverId) {
         const receiver = await User.findById(receiverId);
         const sender = await User.findById(senderId);
-        const isSuperAdmin = sender?.email === 'shofi@gmail.com' || sender?.role === 'admin';
+        const isSuperAdmin = isSuperAdminEmail(sender?.email) || sender?.role === 'admin';
         if (!isSuperAdmin) {
           const isBlocked =
             receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
@@ -61,7 +64,7 @@ const registerChatHandlers = (io, socket) => {
         }
       }
 
-      // Group message flow - nested inside Group document
+      // Group message flow - capped to 300 messages
       if (groupId) {
         socket.join(`group:${groupId}`);
         const messageData = {
@@ -77,17 +80,39 @@ const registerChatHandlers = (io, socket) => {
           timestamp: new Date(),
         };
 
-        // Also create flat Message document for query flexibility
+        // Create flat Message document
         const message = await Message.create({
           ...messageData,
           groupId,
         });
 
-        // Store nested inside Group document
+        const nestedData = {
+          ...messageData,
+          _id: message._id,
+        };
+
+        // Store nested inside Group document, slice to keep latest 300 messages only
         await Group.findByIdAndUpdate(groupId, {
-          $push: { messages: messageData },
-          $set: { lastMessage: messageData, updatedAt: new Date() },
+          $push: {
+            messages: {
+              $each: [nestedData],
+              $slice: -MAX_SOCKET_MESSAGES,
+            },
+          },
+          $set: { lastMessage: nestedData, updatedAt: new Date() },
         });
+
+        // Async clean flat messages beyond 300
+        Message.find({ groupId })
+          .sort({ timestamp: -1 })
+          .skip(MAX_SOCKET_MESSAGES)
+          .select('_id')
+          .then((excess) => {
+            if (excess.length > 0) {
+              Message.deleteMany({ _id: { $in: excess.map((m) => m._id) } }).catch(() => {});
+            }
+          })
+          .catch(() => {});
 
         const sender = await User.findById(senderId, 'name avatar email');
         const messageJSON = {
@@ -104,7 +129,7 @@ const registerChatHandlers = (io, socket) => {
         return;
       }
 
-      // 1-to-1 direct message flow - nested inside Conversation document
+      // 1-to-1 direct message flow - capped to 300 messages
       const receiverOnline = isUserOnline(receiverId);
       const initialStatus = receiverOnline ? 'delivered' : 'sent';
 
@@ -124,18 +149,45 @@ const registerChatHandlers = (io, socket) => {
 
       const message = await Message.create(messageData);
 
-      // Save inside nested Conversation document
+      const nestedData = {
+        ...messageData,
+        _id: message._id,
+      };
+
+      // Save inside nested Conversation document with 300 cap
       await Conversation.findOneAndUpdate(
         {
           participants: { $all: [senderId, receiverId] },
         },
         {
           $setOnInsert: { participants: [senderId, receiverId] },
-          $push: { messages: messageData },
-          $set: { lastMessage: messageData, updatedAt: new Date() },
+          $push: {
+            messages: {
+              $each: [nestedData],
+              $slice: -MAX_SOCKET_MESSAGES,
+            },
+          },
+          $set: { lastMessage: nestedData, updatedAt: new Date() },
         },
         { upsert: true, new: true }
       );
+
+      // Async clean flat 1-to-1 messages beyond 300
+      Message.find({
+        $or: [
+          { senderId, receiverId },
+          { senderId: receiverId, receiverId: senderId },
+        ],
+      })
+        .sort({ timestamp: -1 })
+        .skip(MAX_SOCKET_MESSAGES)
+        .select('_id')
+        .then((excess) => {
+          if (excess.length > 0) {
+            Message.deleteMany({ _id: { $in: excess.map((m) => m._id) } }).catch(() => {});
+          }
+        })
+        .catch(() => {});
 
       const messageJSON = message.toJSON();
 
@@ -147,11 +199,127 @@ const registerChatHandlers = (io, socket) => {
         callback({ success: true, message: messageJSON, tempId });
       }
 
-      // Also broadcast to other tabs of the sender
+      // Sync across sender's other open tabs
       socket.to(`user:${senderId}`).emit('message:sent-sync', messageJSON);
     } catch (err) {
       console.error('[ChatHandler] Error sending message:', err);
       if (callback) callback({ error: 'Failed to send message' });
+    }
+  });
+
+  // Delete message event
+  socket.on('message:delete', async ({ messageId, receiverId, groupId }, callback) => {
+    try {
+      const currentUserId = socket.userId;
+      if (!currentUserId || !messageId) return;
+
+      const mongoose = require('mongoose');
+      if (typeof messageId !== 'string' || !mongoose.Types.ObjectId.isValid(messageId)) {
+        if (callback) callback({ success: true, messageId });
+        return;
+      }
+
+      const objectId = new mongoose.Types.ObjectId(messageId);
+      const user = await User.findById(currentUserId);
+      const isSuperAdmin = isSuperAdminEmail(user?.email) || user?.role === 'admin';
+
+      let msg = await Message.findById(objectId);
+      let senderId = msg?.senderId;
+      let effectiveReceiverId = msg?.receiverId || receiverId;
+      let effectiveGroupId = msg?.groupId || groupId;
+      let content = msg?.content;
+      let timestamp = msg?.timestamp;
+
+      if (msg) {
+        const isSender = String(msg.senderId) === String(currentUserId);
+        if (!isSender && !isSuperAdmin) {
+          if (callback) callback({ error: 'Unauthorized to delete message' });
+          return;
+        }
+        await Message.findByIdAndDelete(objectId);
+      }
+
+      // Check Conversation
+      const conv = await Conversation.findOne({ 'messages._id': objectId });
+      if (conv) {
+        const nestedMsg = conv.messages.id(objectId);
+        if (nestedMsg) {
+          const isSender = String(nestedMsg.senderId) === String(currentUserId);
+          if (!isSender && !isSuperAdmin && !msg) {
+            if (callback) callback({ error: 'Unauthorized to delete message' });
+            return;
+          }
+          senderId = senderId || nestedMsg.senderId;
+          effectiveReceiverId = effectiveReceiverId || nestedMsg.receiverId;
+        }
+        conv.messages.pull(objectId);
+        conv.lastMessage = conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
+        await conv.save();
+      }
+
+      // Check Group
+      const grp = await Group.findOne({ 'messages._id': objectId });
+      if (grp) {
+        const nestedMsg = grp.messages.id(objectId);
+        if (nestedMsg) {
+          const isSender = String(nestedMsg.senderId) === String(currentUserId);
+          if (!isSender && !isSuperAdmin && !msg) {
+            if (callback) callback({ error: 'Unauthorized to delete message' });
+            return;
+          }
+          senderId = senderId || nestedMsg.senderId;
+          effectiveGroupId = effectiveGroupId || grp._id;
+        }
+        grp.messages.pull(objectId);
+        grp.lastMessage = grp.messages.length > 0 ? grp.messages[grp.messages.length - 1] : null;
+        await grp.save();
+      }
+
+      // Clean up in Group if effectiveGroupId known
+      if (effectiveGroupId) {
+        await Group.findByIdAndUpdate(effectiveGroupId, {
+          $pull: {
+            messages: {
+              $or: [
+                { _id: objectId },
+                ...(content && timestamp ? [{ senderId, content, timestamp }] : [])
+              ]
+            }
+          }
+        });
+        io.to(`group:${effectiveGroupId}`).emit('message:deleted', {
+          messageId: String(objectId),
+          groupId: String(effectiveGroupId),
+        });
+      } else if (effectiveReceiverId) {
+        const sid = senderId || currentUserId;
+        await Conversation.updateMany(
+          { participants: { $all: [sid, effectiveReceiverId] } },
+          {
+            $pull: {
+              messages: {
+                $or: [
+                  { _id: objectId },
+                  ...(content && timestamp ? [{ senderId: sid, content, timestamp }] : [])
+                ]
+              }
+            }
+          }
+        );
+        io.to(`user:${effectiveReceiverId}`).emit('message:deleted', {
+          messageId: String(objectId),
+          senderId: String(sid),
+        });
+        io.to(`user:${sid}`).emit('message:deleted', {
+          messageId: String(objectId),
+          receiverId: String(effectiveReceiverId),
+        });
+      }
+
+      if (callback) callback({ success: true, messageId: String(objectId) });
+    } catch (err) {
+      console.error('[ChatHandler] Error deleting message via socket:', err);
+      if (callback) callback({ error: 'Failed to delete message' });
     }
   });
 

@@ -363,40 +363,85 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
     const nextMode = facingMode === 'user' ? 'environment' : 'user';
 
     try {
-      let newStream: MediaStream;
+      // Find available video input devices
+      let videoDevices: MediaDeviceInfo[] = [];
       try {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: nextMode } },
-          audio: false,
-        });
-      } catch {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextMode },
-          audio: false,
-        });
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        videoDevices = allDevices.filter((d) => d.kind === 'videoinput');
+      } catch (e) {
+        console.warn('Could not enumerate video devices:', e);
       }
 
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      if (newVideoTrack) {
-        if (pcRef.current) {
-          const senders = pcRef.current.getSenders();
-          const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            await videoSender.replaceTrack(newVideoTrack);
-          }
+      const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
+      const currentDeviceId = oldVideoTrack?.getSettings()?.deviceId;
+
+      // Find alternative device ID if available
+      let targetDeviceId: string | undefined;
+      if (videoDevices.length > 1) {
+        const altDevice = videoDevices.find((d) => d.deviceId && d.deviceId !== currentDeviceId);
+        if (altDevice) {
+          targetDeviceId = altDevice.deviceId;
         }
+      }
 
-        const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
-        if (oldVideoTrack) oldVideoTrack.stop();
-
+      // Stop old video track first so mobile camera lock is released
+      if (oldVideoTrack) {
+        oldVideoTrack.stop();
         localStreamRef.current.removeTrack(oldVideoTrack);
-        localStreamRef.current.addTrack(newVideoTrack);
+      }
 
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current;
+      let newStream: MediaStream | null = null;
+
+      // Try 1: with exact deviceId if found
+      if (targetDeviceId) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: targetDeviceId } },
+            audio: false,
+          });
+        } catch {}
+      }
+
+      // Try 2: with facingMode ideal
+      if (!newStream) {
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: nextMode } },
+            audio: false,
+          });
+        } catch {
+          // Try 3: generic fallback
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
         }
+      }
 
-        setFacingMode(nextMode);
+      if (newStream) {
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        if (newVideoTrack) {
+          if (pcRef.current) {
+            const senders = pcRef.current.getSenders();
+            const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+            if (videoSender) {
+              await videoSender.replaceTrack(newVideoTrack);
+            }
+          }
+
+          localStreamRef.current.addTrack(newVideoTrack);
+
+          const updatedStream = new MediaStream(localStreamRef.current.getTracks());
+          localStreamRef.current = updatedStream;
+          setLocalStream(updatedStream);
+
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = updatedStream;
+            localVideoRef.current.play().catch(() => {});
+          }
+
+          setFacingMode(nextMode);
+        }
       }
     } catch (err) {
       console.error('Failed to switch camera:', err);
@@ -453,7 +498,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       }
     };
 
-    const handleIceCandidate = async ({ from, candidate }: { from: string; candidate: RTCIceCandidateInit }) => {
+    const handleIceCandidate = async ({ candidate }: { from?: string; candidate: RTCIceCandidateInit }) => {
       if (pcRef.current && pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
         await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
       } else {

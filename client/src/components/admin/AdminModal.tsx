@@ -4,23 +4,27 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Search,
-  Shield,
   ShieldAlert,
   UserX,
   Trash2,
   CheckCircle,
   AlertTriangle,
   RefreshCw,
-  Users,
+  LogOut,
+  ToggleLeft,
+  ToggleRight,
+  Sparkles,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Avatar } from '../ui/Avatar';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { User } from '@/types';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUsersUpdated?: () => void;
+  onLogout?: () => void;
 }
 
 interface AdminUser extends User {
@@ -33,17 +37,37 @@ interface AdminStats {
   blockedCount: number;
 }
 
+const SUPER_ADMINS = [
+  'shofiqul.sujon2201@gmail.com',
+];
+
 export const AdminModal: React.FC<AdminModalProps> = ({
   isOpen,
   onClose,
   onUsersUpdated,
+  onLogout,
 }) => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, onlineCount: 0, blockedCount: 0 });
+  const [allowDummyUsers, setAllowDummyUsers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: () => {},
+  });
 
   const fetchAdminUsers = async () => {
     try {
@@ -52,6 +76,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setUsers(data.users || []);
       if (data.stats) {
         setStats(data.stats);
+      }
+      if (data.settings) {
+        setAllowDummyUsers(!!data.settings.allowDummyUsers);
       }
     } catch (err: any) {
       console.error('Failed to load admin users:', err);
@@ -72,75 +99,114 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setTimeout(() => setFeedback(null), 3500);
   };
 
-  const handleToggleBlock = async (user: AdminUser) => {
-    if (user.email === 'shofi@gmail.com') {
-      showNotification('Cannot block Super Admin', 'error');
+  const handleToggleDummyUsers = async () => {
+    try {
+      setIsUpdatingSettings(true);
+      const nextState = !allowDummyUsers;
+      const res = await apiRequest('/admin/settings', {
+        method: 'POST',
+        body: JSON.stringify({ allowDummyUsers: nextState }),
+      });
+      setAllowDummyUsers(res.settings?.allowDummyUsers ?? nextState);
+      showNotification(
+        nextState
+          ? 'Dummy users enabled on Login page.'
+          : 'Dummy users disabled. Login is restricted to Google Sign-In only.'
+      );
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update setting', 'error');
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  const handleToggleBlock = (user: AdminUser) => {
+    if (SUPER_ADMINS.includes((user.email || '').toLowerCase())) {
+      showNotification('Cannot block Super Admin accounts', 'error');
       return;
     }
 
     const action = user.isBlockedByAdmin ? 'unblock' : 'block';
-    if (!confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
-
-    try {
-      setActionId(user.id);
-      const res = await apiRequest(`/admin/users/${user.id}/toggle-block`, { method: 'POST' });
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === user.id ? { ...u, isBlockedByAdmin: res.user.isBlockedByAdmin } : u
-        )
-      );
-      setStats((prev) => ({
-        ...prev,
-        blockedCount: res.user.isBlockedByAdmin
-          ? prev.blockedCount + 1
-          : Math.max(0, prev.blockedCount - 1),
-      }));
-      showNotification(res.message);
-      onUsersUpdated?.();
-    } catch (err: any) {
-      showNotification(err.message || 'Action failed', 'error');
-    } finally {
-      setActionId(null);
-    }
+    setConfirmState({
+      isOpen: true,
+      title: `${user.isBlockedByAdmin ? 'Unblock' : 'Block'} User?`,
+      description: `Are you sure you want to ${action} ${user.name}?`,
+      confirmText: user.isBlockedByAdmin ? 'Unblock' : 'Block',
+      isDanger: !user.isBlockedByAdmin,
+      onConfirm: async () => {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        try {
+          setActionId(user.id);
+          const res = await apiRequest(`/admin/users/${user.id}/toggle-block`, { method: 'POST' });
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === user.id ? { ...u, isBlockedByAdmin: res.user.isBlockedByAdmin } : u
+            )
+          );
+          setStats((prev) => ({
+            ...prev,
+            blockedCount: res.user.isBlockedByAdmin
+              ? prev.blockedCount + 1
+              : Math.max(0, prev.blockedCount - 1),
+          }));
+          showNotification(res.message);
+          onUsersUpdated?.();
+        } catch (err: unknown) {
+          showNotification(err instanceof Error ? err.message : 'Action failed', 'error');
+        } finally {
+          setActionId(null);
+        }
+      },
+    });
   };
 
-  const handleDeleteUser = async (user: AdminUser) => {
-    if (user.email === 'shofi@gmail.com') {
-      showNotification('Cannot delete Super Admin', 'error');
+  const handleDeleteUser = (user: AdminUser) => {
+    if (SUPER_ADMINS.includes((user.email || '').toLowerCase())) {
+      showNotification('Cannot delete Super Admin accounts', 'error');
       return;
     }
 
-    if (!confirm(`PERMANENT ACTION: Delete user ${user.name} (${user.email})? All their messages and conversations will be wiped.`)) {
-      return;
-    }
-
-    try {
-      setActionId(user.id);
-      const res = await apiRequest(`/admin/users/${user.id}`, { method: 'DELETE' });
-      setUsers((prev) => prev.filter((u) => u.id !== user.id));
-      setStats((prev) => ({
-        ...prev,
-        totalUsers: Math.max(0, prev.totalUsers - 1),
-        onlineCount: user.isOnline ? Math.max(0, prev.onlineCount - 1) : prev.onlineCount,
-      }));
-      showNotification(res.message);
-      onUsersUpdated?.();
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to delete user', 'error');
-    } finally {
-      setActionId(null);
-    }
+    setConfirmState({
+      isOpen: true,
+      title: 'Delete User Account?',
+      description: `PERMANENT ACTION: Delete user ${user.name} (${user.email})? All their messages and conversations will be wiped.`,
+      confirmText: 'Delete User',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        try {
+          setActionId(user.id);
+          const res = await apiRequest(`/admin/users/${user.id}`, { method: 'DELETE' });
+          setUsers((prev) => prev.filter((u) => u.id !== user.id));
+          setStats((prev) => ({
+            ...prev,
+            totalUsers: Math.max(0, prev.totalUsers - 1),
+            onlineCount: user.isOnline ? Math.max(0, prev.onlineCount - 1) : prev.onlineCount,
+          }));
+          showNotification(res.message);
+          onUsersUpdated?.();
+        } catch (err: unknown) {
+          showNotification(err instanceof Error ? err.message : 'Failed to delete user', 'error');
+        } finally {
+          setActionId(null);
+        }
+      },
+    });
   };
 
   if (!isOpen) return null;
 
   const filteredUsers = users.filter((u) => {
     const q = searchQuery.toLowerCase().trim();
-    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    return (
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q)
+    );
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 select-none">
       <div className="relative w-full max-w-3xl bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/60">
@@ -156,20 +222,47 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-neutral-400">
-                Manage, block, or delete any user on Shofi Chat
+                Manage dummy user settings, block users, or delete accounts
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Refresh */}
             <button
               onClick={fetchAdminUsers}
               disabled={isLoading}
               className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-              title="Refresh"
+              title="Refresh Users"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
+
+            {/* Logout Option for Super Admin */}
+            {onLogout && (
+              <button
+                onClick={() => {
+                  setConfirmState({
+                    isOpen: true,
+                    title: 'Super Admin Logout',
+                    description: 'Are you sure you want to log out from Super Admin?',
+                    confirmText: 'Logout',
+                    isDanger: false,
+                    onConfirm: () => {
+                      setConfirmState((prev) => ({ ...prev, isOpen: false }));
+                      onLogout();
+                    },
+                  });
+                }}
+                className="px-3 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Super Admin Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            )}
+
+            {/* Close */}
             <button
               onClick={onClose}
               className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
@@ -179,17 +272,50 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           </div>
         </div>
 
+        {/* SYSTEM SETTINGS CARD: DUMMY USERS TOGGLE */}
+        <div className="p-4 bg-neutral-950/70 border-b border-neutral-800 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-emerald-400 flex-shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-white">
+                Dummy / Demo Users on Login (Alice & Bob)
+              </h4>
+              <p className="text-[11px] text-neutral-400">
+                {allowDummyUsers
+                  ? 'Dummy accounts are currently visible on Login page for quick testing.'
+                  : 'Dummy accounts are OFF. Users can only sign in via Google Authentication.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleToggleDummyUsers}
+            disabled={isUpdatingSettings}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-2 transition-all ${
+              allowDummyUsers
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+            }`}
+          >
+            {allowDummyUsers ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+            <span>{allowDummyUsers ? 'Enabled (Turn Off)' : 'Disabled (Turn On)'}</span>
+          </button>
+        </div>
+
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3 p-4 bg-neutral-950/40 border-b border-neutral-800/80">
-          <div className="p-3 rounded-2xl bg-neutral-850/80 border border-neutral-800 text-center">
+          <div className="p-3 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-center">
             <span className="text-xl font-bold text-white">{stats.totalUsers}</span>
             <p className="text-[11px] text-neutral-400">Total Users</p>
           </div>
-          <div className="p-3 rounded-2xl bg-neutral-850/80 border border-neutral-800 text-center">
+          <div className="p-3 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-center">
             <span className="text-xl font-bold text-emerald-400">{stats.onlineCount}</span>
             <p className="text-[11px] text-neutral-400">Online Now</p>
           </div>
-          <div className="p-3 rounded-2xl bg-neutral-850/80 border border-neutral-800 text-center">
+          <div className="p-3 rounded-2xl bg-neutral-900/80 border border-neutral-800 text-center">
             <span className="text-xl font-bold text-rose-400">{stats.blockedCount}</span>
             <p className="text-[11px] text-neutral-400">Suspended / Blocked</p>
           </div>
@@ -198,113 +324,132 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* Feedback alert */}
         {feedback && (
           <div
-            className={`mx-4 mt-3 px-3.5 py-2.5 rounded-2xl text-xs flex items-center gap-2.5 ${
-              feedback.type === 'error'
-                ? 'bg-rose-950/70 border border-rose-800/80 text-rose-300'
-                : 'bg-emerald-950/70 border border-emerald-800/80 text-emerald-300'
+            className={`mx-4 mt-3 p-3 rounded-2xl text-xs flex items-center gap-2 animate-in fade-in duration-150 ${
+              feedback.type === 'success'
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
             }`}
           >
-            {feedback.type === 'error' ? (
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            {feedback.type === 'success' ? (
+              <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-400" />
             ) : (
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
             )}
             <span>{feedback.message}</span>
           </div>
         )}
 
-        {/* Search Bar */}
-        <div className="p-3 sm:px-4 border-b border-neutral-800/70">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-neutral-400" />
+        {/* Search Input */}
+        <div className="p-4 border-b border-neutral-800/80">
+          <div className="flex items-center bg-neutral-800/60 rounded-xl px-3 py-2 border border-neutral-700/60 focus-within:border-amber-500">
+            <Search className="w-4 h-4 text-neutral-400 mr-2 flex-shrink-0" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search users by name or email..."
-              className="w-full pl-10 pr-4 py-2 bg-neutral-800/80 border border-neutral-700/80 rounded-xl text-xs text-white placeholder-neutral-400 focus:outline-none focus:border-amber-500/80"
+              placeholder="Search user by name, email, or username..."
+              className="w-full bg-transparent text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-neutral-400 hover:text-white"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Users Table / List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-          {isLoading && users.length === 0 ? (
-            <div className="text-center py-12 text-neutral-400 text-xs">
-              Loading user directory...
+        {/* Users List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-44 text-neutral-400 text-xs">
+              <span className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-2" />
+              Loading users list...
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-12 text-neutral-400 text-xs">
+            <div className="text-center py-12 text-neutral-500 text-xs">
               No users found matching &quot;{searchQuery}&quot;
             </div>
           ) : (
             filteredUsers.map((u) => {
-              const isSuper = u.email === 'shofi@gmail.com';
-
+              const isSuper = SUPER_ADMINS.includes((u.email || '').toLowerCase());
               return (
                 <div
                   key={u.id}
-                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl border transition-all gap-3 ${
+                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                     u.isBlockedByAdmin
-                      ? 'bg-rose-950/20 border-rose-900/40 text-neutral-300'
+                      ? 'bg-rose-950/20 border-rose-900/40'
                       : isSuper
-                      ? 'bg-amber-950/20 border-amber-800/40 text-neutral-200'
-                      : 'bg-neutral-850/60 border-neutral-800 text-neutral-200'
+                      ? 'bg-amber-950/15 border-amber-800/40'
+                      : 'bg-neutral-900/60 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
+                  {/* User info */}
                   <div className="flex items-center gap-3 min-w-0">
-                    <Avatar name={u.name} avatar={u.avatar} size="md" isOnline={u.isOnline} showStatus={true} />
+                    <Avatar
+                      name={u.name}
+                      avatar={u.avatar}
+                      size="md"
+                      isOnline={u.isOnline}
+                      showStatus={true}
+                    />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-white truncate">{u.name}</span>
                         {isSuper && (
-                          <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold uppercase border border-amber-500/30">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 flex-shrink-0">
                             Super Admin
                           </span>
                         )}
                         {u.isBlockedByAdmin && (
-                          <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold uppercase border border-rose-500/30">
-                            Suspended
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/25 text-rose-300 border border-rose-500/40 flex-shrink-0">
+                            Blocked
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-neutral-400 truncate">{u.email}</p>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-neutral-500 font-mono">
-                        <span>{u.isOnline ? '🟢 Online' : '⚪ Offline'}</span>
-                        <span>•</span>
-                        <span>{u.friendsCount || 0} friends</span>
-                      </div>
+                      {u.username && (
+                        <p className="text-[11px] text-emerald-400 font-mono">@{u.username}</p>
+                      )}
                     </div>
                   </div>
 
-                  {/* Actions for this user */}
-                  {!isSuper && (
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                  {/* Action buttons */}
+                  {!isSuper ? (
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       {/* Block / Unblock */}
                       <button
                         onClick={() => handleToggleBlock(u)}
                         disabled={actionId === u.id}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                           u.isBlockedByAdmin
-                            ? 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-500/30'
-                            : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600 hover:text-white border border-amber-500/30'
+                            ? 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600 hover:text-white border border-emerald-500/30'
+                            : 'bg-amber-600/20 text-amber-300 hover:bg-amber-600 hover:text-white border border-amber-500/30'
                         }`}
-                        title={u.isBlockedByAdmin ? 'Unblock user' : 'Suspend user'}
+                        title={u.isBlockedByAdmin ? 'Unblock user' : 'Suspend / Block user'}
                       >
                         <UserX className="w-3.5 h-3.5" />
-                        <span>{u.isBlockedByAdmin ? 'Unblock' : 'Suspend'}</span>
+                        <span className="hidden sm:inline">
+                          {u.isBlockedByAdmin ? 'Unblock' : 'Block'}
+                        </span>
                       </button>
 
                       {/* Delete */}
                       <button
                         onClick={() => handleDeleteUser(u)}
                         disabled={actionId === u.id}
-                        className="px-3 py-1.5 rounded-xl text-xs font-medium bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 transition-all flex items-center gap-1.5"
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600/20 text-rose-300 hover:bg-rose-600 hover:text-white border border-rose-500/30 flex items-center gap-1.5 transition-all"
                         title="Permanently Delete User"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
+                        <span className="hidden sm:inline">Delete</span>
                       </button>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-amber-400/80 font-mono px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                      Protected
                     </div>
                   )}
                 </div>
@@ -313,6 +458,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        description={confirmState.description}
+        confirmText={confirmState.confirmText}
+        isDanger={confirmState.isDanger}
+        isLoading={actionId !== null}
+        onConfirm={confirmState.onConfirm}
+        onClose={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

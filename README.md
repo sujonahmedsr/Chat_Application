@@ -1,161 +1,210 @@
-# Shofi Chat — Real-Time Messaging & WebRTC Video Calling Platform
+# Shofi Chat — Real-Time Messaging & WebRTC Calling Platform
 
-A production-ready, full-stack real-time communication application with 1-to-1 persistent text chat, **Group Chats**, **Image / Document / Voice Note Attachments**, and peer-to-peer real-time **Audio & Video Calling** powered by **WebSockets (Socket.io)** and **WebRTC**.
+A modern, production-grade real-time communication platform built with **Next.js 16**, **React 19**, **Node.js**, **Express**, **Socket.io**, and **WebRTC**. Features end-to-end messaging, 1-to-1 & group chats, voice notes, media file sharing, peer-to-peer HD audio/video calls, Google OAuth 2.0 authentication, Cloudinary media storage, and a robust administrative control panel.
 
 ---
 
 ## 🌐 Live Production Links
 
-- **Frontend (Vercel)**: [https://shofichat.vercel.app](https://shofichat.vercel.app)
-- **Backend (Render)**: [https://chat-application-751k.onrender.com](https://chat-application-751k.onrender.com)
-- **Database (MongoDB Atlas)**: Connected (`Chat_Application` cluster)
+* **Frontend (Vercel)**: [https://shofichat.vercel.app](https://shofichat.vercel.app)
+* **Backend API & WebSockets (Render)**: [https://chat-application-751k.onrender.com](https://chat-application-751k.onrender.com)
+* **Database (MongoDB Atlas)**: Hosted on AWS MongoDB Atlas Cluster (`Chat_Application`)
+
+---
+
+## ✨ Features
+
+* **⚡ Real-Time Messaging**: Instant 1-to-1 and group messaging with Socket.io, real-time typing indicators, read receipts, and online/offline presence tracking.
+* **📞 HD Audio & Video Calling**: Peer-to-peer WebRTC calling with live camera preview (PiP), mute/camera toggle, audio frequency visualizers, and ringtones.
+* **🔒 Google OAuth 2.0 & Token Auth**: Secure Google Sign-In with automatic profile provisioning, JWT session tokens, and password protection.
+* **🖼️ Cloudinary Media & Voice Notes**: Direct file and image attachments, voice note audio recording (`MediaRecorder`), and device gallery/camera photo uploads.
+* **👤 User Profiles & Fixed Handles**: Display names, custom avatars, and bios. Usernames are permanently locked to the user's email handle (`@username`) to ensure consistency.
+* **🛡️ Super Admin Panel**: Dedicated control panel for super administrators to manage user accounts, suspend/ban users, delete profiles, toggle demo login access, and view platform metrics.
+* **👥 Friends & Blocking System**: Send, accept, or decline friend requests; block/unfriend users with synchronized socket notifications.
+* **🗑️ Permanent Message Deletion**: Synchronized deletion across both root message collections and nested group/conversation documents with zero browser alert popups.
+* **⏱️ Auto-Retention & Cleanup**: Automated cron-based background cleanup job for conversations according to custom user-defined retention settings (1–15 days).
 
 ---
 
 ## 🚀 Tech Stack
 
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Lucide React, Socket.io Client.
-- **Backend**: Node.js, Express, Socket.io, Mongoose, JSON Web Tokens (JWT), Bcrypt.js.
-- **Database**: MongoDB (Atlas or local instance, with automatic zero-config `mongodb-memory-server` in-memory fallback for local dev).
-- **Real-Time & Signaling**: Socket.io for live messaging, group chat rooms, presence (online/offline), typing indicators, and WebRTC SDP/ICE signaling.
-- **Voice & Video**: WebRTC (`RTCPeerConnection` + `getUserMedia`) with free Google STUN servers, camera toggle, and custom Web Audio API ringtone synthesizer.
-- **Media & Voice Notes**: HTML5 `MediaRecorder` for audio voice notes, File / Image attachments.
+| Domain | Technologies |
+| :--- | :--- |
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Lucide React, Socket.io-client |
+| **Backend** | Node.js, Express 4, Socket.io 4, Mongoose 8, JSON Web Tokens (JWT), Bcrypt.js, Cloudinary SDK |
+| **Database** | MongoDB Atlas (Production) / Mongoose with MongoMemoryServer fallback for local testing |
+| **Real-Time** | WebSockets (Socket.io) for bidirectional events, WebRTC (Google STUN) for audio/video calling |
+| **Storage** | Cloudinary API for profile pictures and media assets |
 
 ---
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```text
 Chat system/
-├── client/                     # Next.js App Router Frontend
+├── client/                     # Next.js 16 App Router Frontend
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── layout.tsx      # Root layout with Auth & Socket providers
-│   │   │   ├── page.tsx        # Main Chat Dashboard (Direct + Group + Video Call)
-│   │   │   ├── login/page.tsx  # Authentication page (+ 1-click demo logins)
-│   │   │   ├── register/page.tsx
-│   │   │   └── globals.css     # Tailwind CSS styles & modern dark theme
+│   │   │   ├── layout.tsx      # Root application layout with context providers
+│   │   │   ├── page.tsx        # Main chat dashboard (Direct, Group, Calls)
+│   │   │   ├── login/page.tsx  # Authentication page with Google OAuth
+│   │   │   ├── register/page.tsx # Account registration page
+│   │   │   └── globals.css     # Global styles & Tailwind CSS v4 tokens
 │   │   ├── components/
-│   │   │   ├── call/
-│   │   │   │   ├── ActiveCallModal.tsx   # Video viewport, PiP camera, audio waves, mute & camera toggle
-│   │   │   │   └── IncomingCallModal.tsx # Audio & Video incoming call popup with ringtone
-│   │   │   ├── chat/
-│   │   │   │   ├── ChatArea.tsx          # Chat window with Audio & Video call actions
-│   │   │   │   ├── MessageBubble.tsx     # Text, Image preview, Audio player, and File download
-│   │   │   │   ├── MessageInput.tsx      # Voice recorder, File/Image picker, Emojis
-│   │   │   │   ├── Sidebar.tsx           # Chats & Groups tab switcher, search, call logs
-│   │   │   │   ├── UserItem.tsx          # User row with unread badge & last message
-│   │   │   │   ├── CreateGroupModal.tsx  # Create groups with member multi-select
-│   │   │   │   └── CallLogsModal.tsx     # WebRTC call history & 1-click redial
-│   │   │   └── ui/
-│   │   │       └── Avatar.tsx            # Avatar with status dot & initials fallback
-│   │   ├── context/
-│   │   │   ├── AuthContext.tsx           # JWT authentication & session refresh
-│   │   │   └── SocketContext.tsx         # Socket.io connection & presence map
-│   │   ├── hooks/
-│   │   │   └── useWebRTC.ts              # WebRTC state machine (Audio & Video streams, camera toggle)
-│   │   ├── lib/
-│   │   │   ├── api.ts                    # REST client with Bearer token injection
-│   │   │   └── sound.ts                  # Web Audio synthesizer (ringtones & tones)
-│   │   └── types/
-│   │       └── index.ts                  # TypeScript definitions (User, Group, Message, CallLog)
+│   │   │   ├── admin/          # Super Admin dashboard modal
+│   │   │   ├── call/           # WebRTC active & incoming call dialogs
+│   │   │   ├── chat/           # Chat area, bubbles, input, sidebar, settings
+│   │   │   └── ui/             # Avatar, skeleton, and confirmation modals
+│   │   ├── context/            # AuthContext and SocketContext
+│   │   ├── hooks/              # useWebRTC audio/video call hook
+│   │   ├── lib/                # API client and sound synthesizer utilities
+│   │   └── types/              # Unified TypeScript interfaces
+│   ├── .env.example            # Client environment variables reference
 │   └── package.json
 │
 ├── server/                     # Express & Socket.io Backend
 │   ├── src/
-│   │   ├── config/
-│   │   │   ├── config.js       # Environment configuration
-│   │   │   └── db.js           # Resilient Mongoose connection + in-memory fallback
-│   │   ├── controllers/
-│   │   │   ├── authController.js
-│   │   │   ├── userController.js
-│   │   │   ├── messageController.js
-│   │   │   ├── groupController.js
-│   │   │   └── callController.js
-│   │   ├── middleware/
-│   │   │   ├── auth.js         # JWT verification middleware
-│   │   │   └── errorHandler.js # Global error handler
-│   │   ├── models/
-│   │   │   ├── User.js         # User schema (presence, credentials, avatar)
-│   │   │   ├── Group.js        # Group schema (members, admins, creator)
-│   │   │   ├── Message.js      # Message schema (text, image, file, audio, groupId)
-│   │   │   └── CallLog.js      # CallLog schema (audio/video, status, duration)
-│   │   ├── routes/
-│   │   │   ├── authRoutes.js
-│   │   │   ├── userRoutes.js
-│   │   │   ├── messageRoutes.js
-│   │   │   ├── groupRoutes.js
-│   │   │   └── callRoutes.js
-│   │   ├── sockets/
-│   │   │   ├── presenceHandler.js # Presence tracking & auto-joining group rooms
-│   │   │   ├── chatHandler.js     # Direct & group messaging, typing, attachments
-│   │   │   ├── callHandler.js     # WebRTC Audio & Video signaling
-│   │   │   └── socketManager.js   # Socket.io auth handshake and setup
-│   │   ├── utils/
-│   │   │   ├── seed.js         # Demo accounts (Alice, Bob, Charlie) & team group
-│   │   │   └── token.js        # JWT generation and verification
-│   │   └── server.js           # Server entry point
-│   ├── .env                    # Server environment variables
+│   │   ├── config/             # Environment & MongoDB connection setup
+│   │   ├── controllers/        # Auth, User, Message, Group, Admin, Call controllers
+│   │   ├── middleware/         # JWT verification, Admin authorization, Error handling
+│   │   ├── models/             # Mongoose schemas (User, Message, Conversation, Group, CallLog)
+│   │   ├── routes/             # REST API endpoint routes
+│   │   ├── sockets/            # Presence, Messaging, and WebRTC signaling handlers
+│   │   └── utils/              # Token, Cloudinary image upload, and background cleanup jobs
+│   ├── .env.example            # Server environment variables reference
 │   └── package.json
 │
-├── package.json                # Root package configuration
-└── README.md
+└── README.md                   # Project documentation
 ```
 
 ---
 
-## 🗄️ Connecting to your own MongoDB (MongoDB Atlas)
+## ⚙️ Local Development Setup
 
-**হ্যাঁ, আপনার MongoDB Atlas ক্লাউড ডেটাবেস কানেক্ট করা খুবই সহজ:**
+### 1. Prerequisites
+* Node.js v18.0.0 or higher
+* npm or yarn
+* (Optional) MongoDB installed locally or a free MongoDB Atlas connection string
 
-1. [MongoDB Atlas](https://cloud.mongodb.com/) এ গিয়ে একটি ক্লাস্টার তৈরি করে আপনার Connection String কপি করুন:
-   ```text
-   mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/chatsystem?retryWrites=true&w=majority
-   ```
-2. `server/.env` ফাইলে `MONGO_URI` হিসেবে সেটি বসিয়ে দিন:
-   ```env
-   PORT=5000
-   CLIENT_URL=http://localhost:3000
-   JWT_SECRET=supersecret_jwt_key_chat_app_2026_production
-   MONGO_URI=mongodb+srv://yourUser:yourPassword@cluster0.abcde.mongodb.net/chatsystem?retryWrites=true&w=majority
-   NODE_ENV=production
-   ```
-3. ব্যাস! সার্ভার রিস্টার্ট দিলে এটি সরাসরি আপনার MongoDB Atlas ক্লাউডে কানেক্ট হবে এবং ইউজার, মেসেজ, গ্রুপ, ফাইল ও কল লগ সরাসরি আপনার ক্লাউড ডেটাবেসে স্থায়ীভাবে সংরক্ষিত থাকবে।
-
----
-
-## ⚡ Quick Start
-
-### 1. Running the Backend Server
+### 2. Backend Setup
 ```bash
 cd server
-npm run dev
+npm install
 ```
-The server will start on `http://localhost:5000`.
 
-### 2. Running the Frontend Client
+Create a `.env` file inside `server/` (refer to `server/.env.example`):
+```env
+PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/Chat_Application?retryWrites=true&w=majority
+JWT_SECRET=supersecret_jwt_key_chat_app_2026_production
+CLIENT_URL=http://localhost:3000
+SERVER_URL=http://localhost:5000
+GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+```
+
+Start the backend development server:
 ```bash
-cd client
 npm run dev
 ```
-Open your browser at `http://localhost:3000`.
+Backend will run at `http://localhost:5000`.
+
+### 3. Frontend Setup
+```bash
+cd ../client
+npm install
+```
+
+Create a `.env.local` file inside `client/`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+```
+
+Start the frontend development server:
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🧪 Testing Guide
+## 🚢 Production Deployment & Live Settings Guide
 
-1. **Tab 1**: Login as **"👩 Alice"** (`alice@example.com` / `password123`).
-2. **Tab 2 (Incognito)**: Login as **"👨 Bob"** (`bob@example.com` / `password123`).
-3. **Test Video Calling**:
-   - Alice-এর উইন্ডোতে Bob-এর সাথে চ্যাটে গিয়ে হেডার থেকে **"Video"** বাটনে ক্লিক করুন।
-   - Alice দেখতে পাবে আউটগোয়িং কল এবং লোকাল ক্যামেরা প্রিভিউ।
-   - Bob-এর কাছে **"Incoming Video Call"** পপআপ আসবে। **"Accept"** বাটনে ক্লিক করলে:
-     - লাইভ পিয়ার-টু-পিয়ার এইচডি ভিডিও স্ট্রিম শুরু হবে।
-     - কর্নারে নিজের ছোট ক্যামেরা প্রিভিউ (Picture-in-Picture) থাকবে।
-     - **Camera Toggle** ও **Mic Mute** বাটন দিয়ে ক্যামেরা অন/অফ ও মাইক মিউট টেস্ট করুন।
-4. **Test Attachments & Voice Notes**:
-   - ইনপুট বারের **Paperclip (📎)** বাটনে ক্লিক করে যেকোনো **Image** বা **Document/File** সিলেক্ট করুন এবং Send করুন।
-   - ইনপুট বার ফাঁকা রেখে ডানপাশের **Mic (🎙️)** আইকনে ক্লিক করে সরাসরি ভয়েস নোট রেকর্ড করুন এবং Send বাটনে ক্লিক করে পাঠিয়ে দিন। অপর প্রান্তে ইন-লাইন অডিও প্লেয়ারে প্লে হবে!
-5. **Test Group Chat**:
-   - সাইডবারে **"Groups"** ট্যাবে ক্লিক করুন। প্রাক-কনফিগার করা **"🚀 Dev & Product Squad"** গ্রুপ দেখতে পাবেন।
-   - সাইডবারের হেডার থেকে **UserPlus (👥+)** বাটনে ক্লিক করে নতুন গ্রুপ তৈরি করুন, মেম্বার সিলেক্ট করুন এবং রিয়েল-টাইম গ্রুপ মেসেজ ও গ্রুপ টাইপিং ইন্ডিকেটর টেস্ট করুন।
+### 1. MongoDB Atlas Configuration
+1. Go to [MongoDB Atlas](https://cloud.mongodb.com/) and navigate to **Network Access**.
+2. Ensure `0.0.0.0/0` (Allow Access from Anywhere) is whitelisted so cloud platforms like Render or Vercel can connect without connection timeouts.
+3. In **Database Access**, verify your database user has `readWriteAnyDatabase` privileges.
+4. Copy the connection string:
+   ```text
+   mongodb+srv://<username>:<password>@cluster.mongodb.net/Chat_Application?retryWrites=true&w=majority
+   ```
+
+### 2. Google Cloud Console (OAuth 2.0 Credentials)
+1. Open the [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+2. Select your project and click your **OAuth 2.0 Client ID** (Web application).
+3. Under **Authorized JavaScript origins**, add:
+   * `http://localhost:3000` (Local testing)
+   * `https://shofichat.vercel.app` (Live frontend)
+4. Under **Authorized redirect URIs**, add:
+   * `http://localhost:5000/api/auth/google/callback` (Local backend)
+   * `https://chat-application-751k.onrender.com/api/auth/google/callback` (Live backend)
+5. Save changes.
+
+### 3. Backend Deployment (e.g. Render / Railway / VPS)
+1. Link your GitHub repository to Render (Web Service).
+2. Set **Root Directory**: `server`
+3. Set **Build Command**: `npm install`
+4. Set **Start Command**: `npm start`
+5. Configure Environment Variables in the Render Dashboard:
+   * `PORT`: `5000` (or leave default assigned by host)
+   * `NODE_ENV`: `production`
+   * `MONGO_URI`: Your MongoDB Atlas connection string
+   * `JWT_SECRET`: A strong random string
+   * `CLIENT_URL`: `https://shofichat.vercel.app` (or comma-separated with localhost)
+   * `SERVER_URL`: `https://chat-application-751k.onrender.com`
+   * `GOOGLE_CLIENT_ID`: Your Google OAuth client ID
+   * `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret
+   * `GOOGLE_CALLBACK_URL`: `https://chat-application-751k.onrender.com/api/auth/google/callback`
+   * `CLOUDINARY_CLOUD_NAME`: Your Cloudinary cloud name
+   * `CLOUDINARY_API_KEY`: Your Cloudinary API key
+   * `CLOUDINARY_API_SECRET`: Your Cloudinary API secret
+
+### 4. Frontend Deployment (Vercel)
+1. Import your GitHub repository into [Vercel](https://vercel.com/).
+2. Set **Root Directory**: `client`
+3. Framework Preset: **Next.js**
+4. Configure Environment Variables in the Vercel Project Settings:
+   * `NEXT_PUBLIC_API_URL`: `https://chat-application-751k.onrender.com/api`
+   * `NEXT_PUBLIC_SOCKET_URL`: `https://chat-application-751k.onrender.com`
+   * `NEXT_PUBLIC_GOOGLE_CLIENT_ID`: Your Google OAuth client ID
+5. Deploy.
+
+---
+
+## 🧪 Testing & Verification Guide
+
+1. **Authentication**:
+   * Click **Sign in with Google** to authenticate with your Google account.
+   * Your username is automatically created from your email prefix (`@email_handle`).
+2. **Profile & Customization**:
+   * Click your profile avatar on the sidebar to open **Settings**.
+   * Update your Display Name, Bio, and upload a custom photo from your device.
+   * Notice that your Username is safely locked to your email handle.
+3. **1-to-1 & Group Chats**:
+   * Send text, emoji, file attachments, and record voice notes.
+   * Click the trash icon to delete messages; verify that messages are permanently removed from both UI and database upon refresh.
+4. **Audio & Video Calls**:
+   * Click the **Video** or **Phone** icon in the chat header to initiate a peer-to-peer WebRTC call.
+   * Accept the call on another device/browser to test bidirectional video/audio streams and picture-in-picture preview.
+
+---
+
+## 📄 License
+This project is open-source and available under the [MIT License](LICENSE).

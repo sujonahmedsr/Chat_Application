@@ -2,11 +2,13 @@ const User = require('../models/User');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('../sockets/presenceHandler');
 
+const { isSuperAdminEmail } = require('../utils/superAdmin');
+
 // Get all confirmed friends for current user (Super Admin gets all users directly)
 const getFriends = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const isSuperAdmin = req.user.email === 'shofi@gmail.com' || req.user.role === 'admin';
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
 
     let friends;
     if (isSuperAdmin) {

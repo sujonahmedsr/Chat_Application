@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -17,22 +18,26 @@ const adminRoutes = require('./routes/adminRoutes');
 const app = express();
 const server = http.createServer(app);
 
-// Cross-Origin Resource Sharing configuration
+// Cross-Origin Resource Sharing configuration (reads strictly from CLIENT_URL in .env)
+const allowedOrigins = (CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((url) => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      // Allow requests with no origin (mobile apps, server-to-server, curl)
       if (!origin) return callback(null, true);
-      const cleanClientUrl = (CLIENT_URL || '').replace(/\/+$/, '');
-      if (
-        origin === cleanClientUrl ||
-        origin.endsWith('.vercel.app') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1')
-      ) {
+
+      const isAllowed = allowedOrigins.some((allowed) => {
+        return origin === allowed || origin.startsWith(allowed);
+      });
+
+      if (isAllowed || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      return callback(null, true);
+      return callback(new Error(`CORS blocked origin: ${origin}`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -65,12 +70,14 @@ app.use(errorHandler);
 initSocket(server, CLIENT_URL);
 
 const { seedInitialData } = require('./utils/seed');
+const { startMessageCleanupScheduler } = require('./utils/cleanupJob');
 
 // Start Server & Connect to DB
 const startServer = async () => {
   try {
     await connectDB();
     await seedInitialData();
+    startMessageCleanupScheduler();
     server.listen(PORT, () => {
       console.log(`=========================================`);
       console.log(`🚀 Chat & WebRTC Server running on port ${PORT}`);

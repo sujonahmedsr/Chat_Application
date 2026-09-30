@@ -3,28 +3,45 @@ const User = require('../models/User');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
 
+const SystemSetting = require('../models/SystemSetting');
+const { SUPER_ADMIN_EMAILS } = require('./superAdmin');
+
 const seedInitialData = async () => {
   try {
-    // 1. Always ensure Super Admin shofi@gmail.com exists
-    let shofiAdmin = await User.findOne({ email: 'shofi@gmail.com' });
-    if (!shofiAdmin) {
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash('admin123', salt);
-      shofiAdmin = await User.create({
-        name: 'Shofi (Super Admin)',
-        email: 'shofi@gmail.com',
-        passwordHash,
-        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=ShofiAdmin',
-        role: 'admin',
-        isOnline: false,
-        lastSeen: new Date(),
-      });
-      console.log('[Seed] 🛡️ Super Admin created: shofi@gmail.com / admin123');
-    } else if (shofiAdmin.role !== 'admin') {
-      shofiAdmin.role = 'admin';
-      await shofiAdmin.save();
-      console.log('[Seed] 🛡️ Upgraded shofi@gmail.com to Super Admin');
+    // 0. Ensure default System Settings (dummy users OFF by default)
+    const existingDummySetting = await SystemSetting.findOne({ key: 'allowDummyUsers' });
+    if (!existingDummySetting) {
+      await SystemSetting.create({ key: 'allowDummyUsers', value: false });
+      console.log('[Seed] ⚙️ Initialized allowDummyUsers: false');
     }
+
+    // 1. Ensure Super Admins exist & have role: admin
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash('admin123', salt);
+
+    for (const email of SUPER_ADMIN_EMAILS) {
+      const normalizedEmail = email.toLowerCase().trim();
+      let adminUser = await User.findOne({ email: normalizedEmail });
+      if (!adminUser) {
+        adminUser = await User.create({
+          name: normalizedEmail.split('@')[0],
+          email: normalizedEmail,
+          passwordHash,
+          avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(normalizedEmail)}`,
+          role: 'admin',
+          isOnline: false,
+          lastSeen: new Date(),
+        });
+        console.log(`[Seed] 🛡️ Super Admin created: ${normalizedEmail}`);
+      } else if (adminUser.role !== 'admin') {
+        adminUser.role = 'admin';
+        await adminUser.save();
+        console.log(`[Seed] 🛡️ Upgraded ${normalizedEmail} to Super Admin`);
+      }
+    }
+
+    // Ensure shofiqul.sujon2021@gmail.com is set as regular user, not admin
+    await User.updateOne({ email: 'shofiqul.sujon2021@gmail.com' }, { $set: { role: 'user' } });
 
     const userCount = await User.countDocuments();
     if (userCount > 1) {
@@ -32,13 +49,12 @@ const seedInitialData = async () => {
     }
 
     console.log('[Seed] Seeding sample users, groups, and messages...');
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash('password123', salt);
+    const demoPasswordHash = await bcrypt.hash('password123', salt);
 
     const alice = await User.create({
       name: 'Alice Johnson',
       email: 'alice@example.com',
-      passwordHash,
+      passwordHash: demoPasswordHash,
       avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alice%20Johnson',
       isOnline: false,
       lastSeen: new Date(Date.now() - 1000 * 60 * 15),
@@ -47,7 +63,7 @@ const seedInitialData = async () => {
     const bob = await User.create({
       name: 'Bob Smith',
       email: 'bob@example.com',
-      passwordHash,
+      passwordHash: demoPasswordHash,
       avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Bob%20Smith',
       isOnline: false,
       lastSeen: new Date(Date.now() - 1000 * 60 * 5),
@@ -56,7 +72,7 @@ const seedInitialData = async () => {
     const charlie = await User.create({
       name: 'Charlie Davis',
       email: 'charlie@example.com',
-      passwordHash,
+      passwordHash: demoPasswordHash,
       avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Charlie%20Davis',
       isOnline: false,
       lastSeen: new Date(Date.now() - 1000 * 60 * 60),

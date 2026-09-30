@@ -34,7 +34,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://chat-application-751k.onrender.com';
+    let socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || '';
+    if (typeof window !== 'undefined') {
+      const isLocal =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.startsWith('192.168.') ||
+        window.location.hostname.startsWith('10.');
+
+      if (isLocal) {
+        socketUrl = `http://${window.location.hostname}:5000`;
+      }
+    }
 
     const newSocket = io(socketUrl, {
       auth: { token, userId: user.id },

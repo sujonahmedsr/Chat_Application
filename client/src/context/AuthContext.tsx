@@ -9,6 +9,24 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  googleLogin: (payload: {
+    credential?: string;
+    email?: string;
+    name?: string;
+    avatar?: string;
+    googleId?: string;
+  }) => Promise<User>;
+  updateProfile: (data: {
+    name?: string;
+    username?: string;
+    avatar?: string;
+    bio?: string;
+    settings?: {
+      saveChatHistory?: boolean;
+      chatRetentionDays?: number;
+      hasCompletedSetup?: boolean;
+    };
+  }) => Promise<User>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -23,7 +41,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUser = async () => {
     try {
-      const storedToken = localStorage.getItem('chat_token');
+      let storedToken = typeof window !== 'undefined' ? localStorage.getItem('chat_token') : null;
+
+      // Extract OAuth callback token directly if present in URL
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlToken = params.get('token');
+        if (urlToken) {
+          storedToken = urlToken;
+          localStorage.setItem('chat_token', urlToken);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+
       if (!storedToken) {
         setUser(null);
         setLoading(false);
@@ -57,6 +87,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(data.user);
   };
 
+  const googleLogin = async (payload: {
+    credential?: string;
+    email?: string;
+    name?: string;
+    avatar?: string;
+    googleId?: string;
+  }) => {
+    const data = await apiRequest('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    localStorage.setItem('chat_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const updateProfile = async (updateData: {
+    name?: string;
+    username?: string;
+    avatar?: string;
+    bio?: string;
+    settings?: {
+      saveChatHistory?: boolean;
+      chatRetentionDays?: number;
+      hasCompletedSetup?: boolean;
+    };
+  }) => {
+    const data = await apiRequest('/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify(updateData),
+    });
+
+    setUser(data.user);
+    return data.user;
+  };
+
   const register = async (name: string, email: string, password: string) => {
     const data = await apiRequest('/auth/register', {
       method: 'POST',
@@ -71,7 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
-    } catch (err) {
+    } catch {
       // Continue client cleanup even if network fails
     } finally {
       localStorage.removeItem('chat_token');
@@ -87,6 +155,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         loading,
         login,
+        googleLogin,
+        updateProfile,
         register,
         logout,
         refreshUser,

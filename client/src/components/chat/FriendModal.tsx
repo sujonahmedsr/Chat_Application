@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Search, UserCheck, UserPlus, Check, Clock, UserX, AlertCircle } from 'lucide-react';
+import { X, Search, UserCheck, UserPlus, Check, Clock, UserX } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Avatar } from '../ui/Avatar';
 import { User } from '@/types';
@@ -212,7 +212,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
               pendingRequests.map((req) => (
                 <div
                   key={req._id}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/50 border border-neutral-750"
+                  className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/50 border border-neutral-800"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar name={req.from.name} avatar={req.from.avatar} size="md" />
@@ -275,7 +275,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
                   {searchResults.map((user) => (
                     <div
                       key={user.id}
-                      className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/40 border border-neutral-750/70"
+                      className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/40 border border-neutral-800/70"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <Avatar name={user.name} avatar={user.avatar} size="md" />

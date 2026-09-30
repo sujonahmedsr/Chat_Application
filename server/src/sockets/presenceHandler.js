@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
+const { isSuperAdminEmail } = require('../utils/superAdmin');
 
 // In-memory mapping: userId -> Set of socket IDs
 const onlineUsers = new Map();
@@ -28,7 +29,7 @@ const handleUserConnected = async (io, socket, userId) => {
   // Auto-join group rooms (Super Admin joins all groups)
   try {
     const userDoc = await User.findById(strUserId, 'email role');
-    const isSuperAdmin = userDoc?.email === 'shofi@gmail.com' || userDoc?.role === 'admin';
+    const isSuperAdmin = isSuperAdminEmail(userDoc?.email) || userDoc?.role === 'admin';
     const groupFilter = isSuperAdmin ? {} : { members: strUserId };
 
     const userGroups = await Group.find(groupFilter, '_id');
