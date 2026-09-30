@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MessageSquare, ShieldCheck, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
+import { initNotificationAndAudioOnce } from '@/lib/notification';
 
 export default function LoginPage() {
   const [error, setError] = useState('');
@@ -28,6 +29,9 @@ export default function LoginPage() {
     try {
       setSubmitting(true);
       setError('');
+
+      // Pre-warm sound audio context and prompt notification once on user click
+      initNotificationAndAudioOnce().catch(() => {});
 
       // Check backend for Direct Google OAuth 2.0 URL
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';

@@ -97,10 +97,45 @@ export async function requestNotificationPermission(): Promise<boolean> {
   if (!isNotificationSupported()) return false;
   try {
     const permission = await Notification.requestPermission();
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('shofi_notification_asked', 'true');
+    }
     return permission === 'granted';
   } catch (e) {
     console.error('Error requesting notification permission:', e);
     return false;
+  }
+}
+
+/**
+ * One-time setup on login/first entry:
+ * Prompts notification permission ONCE and unlocks audio context
+ * so the user is never repeatedly prompted or annoyed afterwards.
+ */
+export async function initNotificationAndAudioOnce(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  // Unlock and pre-warm audio context
+  try {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+  } catch {}
+
+  const alreadyRequested = localStorage.getItem('shofi_notification_asked') === 'true';
+
+  // Only request if permission is still 'default' and we have not prompted yet
+  if (isNotificationSupported() && Notification.permission === 'default' && !alreadyRequested) {
+    localStorage.setItem('shofi_notification_asked', 'true');
+    try {
+      const res = await Notification.requestPermission();
+      if (res === 'granted') {
+        playNotificationSound();
+      }
+    } catch (err) {
+      console.debug('[Notification] Request permission notice:', err);
+    }
   }
 }
 

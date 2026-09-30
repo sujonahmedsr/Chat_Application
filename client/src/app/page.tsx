@@ -9,7 +9,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { useGroupCall } from '@/hooks/useGroupCall';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
-import { triggerNotification, playNotificationSound } from '@/lib/notification';
+import { triggerNotification, playNotificationSound, initNotificationAndAudioOnce } from '@/lib/notification';
 import { NotificationToast, ToastNotificationData } from '@/components/ui/NotificationToast';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
@@ -100,31 +100,16 @@ export default function ChatDashboard() {
     triggerNotification(title, { body, onClick });
   }, []);
 
-  // Automatic Browser Notification Enable System
+  // One-time Notification & Sound permission initialization upon login / initial entry
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (typeof window === 'undefined') return;
 
-    const autoEnable = async () => {
-      if (Notification.permission === 'default') {
-        try {
-          const res = await Notification.requestPermission();
-          if (res === 'granted') {
-            playNotificationSound();
-          }
-        } catch (err) {
-          console.debug('[Notification] Auto enable notice:', err);
-        }
-      }
-    };
+    // Run once upon initial entry
+    initNotificationAndAudioOnce();
 
-    // Prompt automatically on mount
-    autoEnable();
-
-    // Fallback: prompt on first user touch/click if browser blocks unprompted requests
+    // Fallback: in case browser strictly requires direct user interaction gesture to prompt
     const onUserInteraction = () => {
-      if (Notification.permission === 'default') {
-        autoEnable();
-      }
+      initNotificationAndAudioOnce();
     };
 
     window.addEventListener('click', onUserInteraction, { once: true, passive: true });
@@ -135,13 +120,6 @@ export default function ChatDashboard() {
       window.removeEventListener('touchstart', onUserInteraction);
     };
   }, []);
-
-  // Open settings right away if user hasn't completed initial settings setup
-  useEffect(() => {
-    if (currentUser && currentUser.settings?.hasCompletedSetup === false) {
-      setShowSettingsModal(true);
-    }
-  }, [currentUser]);
 
   // Automatic Call Log in Conversation Handler
   const handleCallEndedLog = useCallback(
