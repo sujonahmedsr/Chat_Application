@@ -278,7 +278,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   ? 'bg-white/20 text-white'
                   : 'bg-emerald-100 text-emerald-600'
               }`}>
-                <Mic className="w-4 h-4" />
+                <Mic className="w-4 h-4 " />
               </div>
               <audio
                 controls
