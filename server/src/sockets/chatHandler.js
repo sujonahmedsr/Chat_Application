@@ -36,6 +36,7 @@ const registerChatHandlers = (io, socket) => {
         fileSize = 0,
         callDuration = 0,
         callStatus = '',
+        replyTo = null,
         tempId,
       } = data;
 
@@ -65,6 +66,12 @@ const registerChatHandlers = (io, socket) => {
         }
       }
 
+      const formattedReplyTo = replyTo && replyTo.id ? {
+        id: String(replyTo.id),
+        content: (replyTo.content || '').substring(0, 200),
+        senderName: replyTo.senderName || '',
+      } : undefined;
+
       // Group message flow - capped to 300 messages
       if (groupId) {
         socket.join(`group:${groupId}`);
@@ -77,6 +84,7 @@ const registerChatHandlers = (io, socket) => {
           fileSize,
           callDuration,
           callStatus,
+          replyTo: formattedReplyTo,
           status: 'delivered',
           timestamp: new Date(),
         };
@@ -144,6 +152,7 @@ const registerChatHandlers = (io, socket) => {
         fileSize,
         callDuration,
         callStatus,
+        replyTo: formattedReplyTo,
         status: initialStatus,
         timestamp: new Date(),
       };

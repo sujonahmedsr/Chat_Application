@@ -49,10 +49,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 }) => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, onlineCount: 0, blockedCount: 0 });
-  const [allowDummyUsers, setAllowDummyUsers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmState, setConfirmState] = useState<{
@@ -77,9 +75,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       if (data.stats) {
         setStats(data.stats);
       }
-      if (data.settings) {
-        setAllowDummyUsers(!!data.settings.allowDummyUsers);
-      }
     } catch (err: any) {
       console.error('Failed to load admin users:', err);
       setFeedback({ message: err.message || 'Failed to load user list', type: 'error' });
@@ -97,27 +92,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setFeedback({ message, type });
     setTimeout(() => setFeedback(null), 3500);
-  };
-
-  const handleToggleDummyUsers = async () => {
-    try {
-      setIsUpdatingSettings(true);
-      const nextState = !allowDummyUsers;
-      const res = await apiRequest('/admin/settings', {
-        method: 'POST',
-        body: JSON.stringify({ allowDummyUsers: nextState }),
-      });
-      setAllowDummyUsers(res.settings?.allowDummyUsers ?? nextState);
-      showNotification(
-        nextState
-          ? 'Dummy users enabled on Login page.'
-          : 'Dummy users disabled. Login is restricted to Google Sign-In only.'
-      );
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to update setting', 'error');
-    } finally {
-      setIsUpdatingSettings(false);
-    }
   };
 
   const handleToggleBlock = (user: AdminUser) => {
@@ -270,39 +244,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
-        </div>
-
-        {/* SYSTEM SETTINGS CARD: DUMMY USERS TOGGLE */}
-        <div className="p-4 bg-neutral-950/70 border-b border-neutral-800 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-emerald-400 flex-shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-semibold text-white">
-                Dummy / Demo Users on Login (Alice & Bob)
-              </h4>
-              <p className="text-[11px] text-neutral-400">
-                {allowDummyUsers
-                  ? 'Dummy accounts are currently visible on Login page for quick testing.'
-                  : 'Dummy accounts are OFF. Users can only sign in via Google Authentication.'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleToggleDummyUsers}
-            disabled={isUpdatingSettings}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-2 transition-all ${
-              allowDummyUsers
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-            }`}
-          >
-            {allowDummyUsers ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-            <span>{allowDummyUsers ? 'Enabled (Turn Off)' : 'Disabled (Turn On)'}</span>
-          </button>
         </div>
 
         {/* Stats Row */}

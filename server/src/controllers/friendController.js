@@ -17,16 +17,22 @@ const getFriends = async (req, res, next) => {
     } else {
       const currentUser = await User.findById(currentUserId).populate(
         'friends',
-        'name email avatar isOnline lastSeen'
+        'name email avatar isOnline lastSeen blockedUsers'
       );
 
       if (!currentUser) {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      const blockedIds = (currentUser.blockedUsers || []).map(String);
+      const myBlockedIds = (currentUser.blockedUsers || []).map(String);
       const rawFriends = currentUser.friends || [];
-      friends = rawFriends.filter((f) => !blockedIds.includes(String(f._id)));
+      // Completely hide if user is blocked by me OR if that user has blocked me
+      friends = rawFriends.filter((f) => {
+        const fId = String(f._id);
+        const hasBlockedMe = (f.blockedUsers || []).map(String).includes(String(currentUserId));
+        const isBlockedByMe = myBlockedIds.includes(fId);
+        return !isBlockedByMe && !hasBlockedMe;
+      });
     }
 
     // Enrich with live presence and conversation preview
@@ -338,6 +344,17 @@ const blockUser = async (req, res, next) => {
         friendRequests: { from: currentUserId },
         sentRequests: { to: currentUserId },
       },
+    });
+
+    // Wipe conversation and messages between them ("block kora hole sob conversation gayeb hoye jabe")
+    await Conversation.findOneAndDelete({
+      participants: { $all: [currentUserId, targetUserId] },
+    });
+    await Message.deleteMany({
+      $or: [
+        { senderId: currentUserId, receiverId: targetUserId },
+        { senderId: targetUserId, receiverId: currentUserId },
+      ],
     });
 
     try {

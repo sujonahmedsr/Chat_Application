@@ -59,6 +59,11 @@ const messageSchema = new mongoose.Schema(
       default: 'sent',
       index: true,
     },
+    replyTo: {
+      id: { type: String, default: '' },
+      content: { type: String, default: '' },
+      senderName: { type: String, default: '' },
+    },
     timestamp: {
       type: Date,
       default: Date.now,

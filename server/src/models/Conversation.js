@@ -49,6 +49,11 @@ const nestedMessageSchema = new mongoose.Schema(
       enum: ['sent', 'delivered', 'read'],
       default: 'sent',
     },
+    replyTo: {
+      id: { type: String, default: '' },
+      content: { type: String, default: '' },
+      senderName: { type: String, default: '' },
+    },
     timestamp: {
       type: Date,
       default: Date.now,

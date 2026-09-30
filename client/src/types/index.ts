@@ -49,8 +49,14 @@ export interface Message {
   callDuration?: number;
   callStatus?: string;
   status: 'sent' | 'delivered' | 'read';
+  replyTo?: {
+    id: string;
+    content: string;
+    senderName?: string;
+  };
   timestamp: string;
   sender?: User;
+  senderName?: string;
 }
 
 export interface CallLog {

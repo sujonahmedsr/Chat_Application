@@ -14,6 +14,11 @@ import {
   Check,
   Trash2,
   AlertTriangle,
+  Users,
+  UserPlus,
+  UserMinus,
+  X,
+  Reply,
 } from 'lucide-react';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
@@ -28,10 +33,11 @@ interface ChatAreaProps {
   selectedGroup: Group | null;
   currentUser: User | null;
   messages: Message[];
+  availableFriends?: User[];
   isLoadingMessages?: boolean;
   isRecipientTyping: boolean;
   groupTypingUser?: string | null;
-  onSendMessage: (content: string, attachment?: any) => void;
+  onSendMessage: (content: string, attachment?: any, replyTo?: any) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
   onStartCall: (user: User, type: 'audio' | 'video') => void;
@@ -39,6 +45,7 @@ interface ChatAreaProps {
   onClearHistory?: () => void;
   onClearGroupMessages?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
+  onGroupUpdated?: (updatedGroup: Group) => void;
   onBack?: () => void;
   onFriendUpdated?: () => void;
 }
@@ -61,6 +68,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   selectedGroup,
   currentUser,
   messages,
+  availableFriends = [],
   isLoadingMessages = false,
   isRecipientTyping,
   groupTypingUser,
@@ -72,12 +80,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onClearHistory,
   onClearGroupMessages,
   onDeleteGroup,
+  onGroupUpdated,
   onBack,
   onFriendUpdated,
 }) => {
   const [chatTheme, setChatTheme] = useState('emerald');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showContactMenu, setShowContactMenu] = useState(false);
+  const [showGroupCallModal, setShowGroupCallModal] = useState(false);
+  const [showManageMembersModal, setShowManageMembersModal] = useState(false);
+  const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -334,11 +346,54 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) ||
     currentUser?.role === 'admin';
 
+  const currentUserId = String(currentUser?.id || (currentUser as any)?._id || '');
+
+  const groupCreatorId = isGroup && selectedGroup
+    ? String((selectedGroup.creator as any)?._id || selectedGroup.creator || '')
+    : '';
+
+  const isGroupCreator = isGroup && Boolean(groupCreatorId && groupCreatorId === currentUserId);
+
   const isGroupAdmin = isGroup && selectedGroup && (
     isCurrentUserAdmin ||
-    String(selectedGroup.creator) === String(currentUser?.id) ||
-    (selectedGroup.admins || []).map(String).includes(String(currentUser?.id))
+    isGroupCreator ||
+    (selectedGroup.admins || []).some((a: any) => String(a?._id || a?.id || a) === currentUserId)
   );
+
+  const handleAddMemberToGroup = async (friendId: string) => {
+    if (!selectedGroup) return;
+    try {
+      setActionLoading(true);
+      const data = await apiRequest(`/groups/${selectedGroup.id}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ memberIds: [friendId] }),
+      });
+      if (data.group) {
+        onGroupUpdated?.(data.group);
+      }
+    } catch (err: unknown) {
+      console.error(err instanceof Error ? err.message : 'Failed to add member to group');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRemoveMemberFromGroup = async (memberId: string) => {
+    if (!selectedGroup) return;
+    try {
+      setActionLoading(true);
+      const data = await apiRequest(`/groups/${selectedGroup.id}/members/${memberId}`, {
+        method: 'DELETE',
+      });
+      if (data.group) {
+        onGroupUpdated?.(data.group);
+      }
+    } catch (err: unknown) {
+      console.error(err instanceof Error ? err.message : 'Failed to remove member from group');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
     <main className="flex-1 flex flex-col h-full bg-neutral-950 overflow-hidden relative">
@@ -441,21 +496,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           )}
 
-          {/* GROUP CALL ACTIONS: Group video call OFF, only group audio call! */}
+          {/* GROUP CALL ACTIONS: Opens member call modal */}
           {isGroup && (
             <button
-              onClick={() => {
-                if (selectedGroup.members && selectedGroup.members.length > 0) {
-                  const target = selectedGroup.members.find((m) => String(m.id) !== String(currentUser?.id));
-                  if (target) {
-                    onStartCall(target, 'audio');
-                  } else {
-                    console.warn('No other members to call in this group');
-                  }
-                }
-              }}
+              onClick={() => setShowGroupCallModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-500/30 transition-all text-xs font-medium active:scale-95 shadow-sm"
-              title="Start Group Audio Call (Group Video Disabled)"
+              title="Start Group Audio Call"
             >
               <Phone className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Audio Call</span>
@@ -487,7 +533,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </>
           )}
 
-          {/* Options Dropdown (1-to-1: Clear Chat / Unfriend / Block | Group: Clear Group Messages / Delete Group) */}
+          {/* Options Dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowContactMenu((prev) => !prev)}
@@ -541,7 +587,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                 {isGroup && selectedGroup && (
                   <>
-                    {isGroupAdmin ? (
+                    {/* Manage Group Members: Admin & Creator only */}
+                    {isGroupAdmin && (
+                      <button
+                        onClick={() => {
+                          setShowContactMenu(false);
+                          setShowManageMembersModal(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+                      >
+                        <Users className="w-4 h-4 text-emerald-400" />
+                        <span>Manage Members</span>
+                      </button>
+                    )}
+
+                    {/* Clear Messages & Delete Group: Creator ONLY */}
+                    {isGroupCreator && (
                       <>
                         <button
                           onClick={handleClearGroup}
@@ -560,9 +621,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <span>Delete Group</span>
                         </button>
                       </>
-                    ) : (
+                    )}
+
+                    {!isGroupAdmin && (
                       <div className="px-3 py-2 text-[11px] text-neutral-400">
-                        Group admin controls only
+                        Group member
                       </div>
                     )}
                   </>
@@ -598,15 +661,40 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 message={message}
                 isSelf={isSelf}
                 isGroup={isGroup}
+                isGroupCreator={Boolean(isGroupCreator)}
                 theme={chatTheme}
                 onDeleteMessage={onDeleteMessage ? requestDeleteMessage : undefined}
-                canDelete={isCurrentUserAdmin || (isGroup && isGroupAdmin)}
+                onReplyMessage={(msg) => setReplyingMessage(msg)}
               />
             );
           })
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Replying Banner */}
+      {replyingMessage && (
+        <div className="px-4 py-2 bg-neutral-900/95 border-t border-neutral-800 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2 border-l-2 border-emerald-400 pl-2.5 min-w-0">
+            <Reply className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[11px] font-semibold text-emerald-400 block">
+                Replying to {replyingMessage.senderName || (checkIsSelf(replyingMessage) ? 'yourself' : 'message')}
+              </span>
+              <p className="text-xs text-neutral-300 truncate">
+                {replyingMessage.content || (replyingMessage.messageType === 'audio' ? '🎤 Voice note' : 'Attachment')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setReplyingMessage(null)}
+            className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors flex-shrink-0"
+            title="Cancel reply"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Message Input Footer or Blocked Notice */}
       {isBlockedByMe ? (
@@ -630,11 +718,210 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       ) : (
         <MessageInput
-          onSendMessage={onSendMessage}
+          onSendMessage={(content, attachment) => {
+            const replyPayload = replyingMessage ? {
+              id: replyingMessage.id,
+              content: replyingMessage.content || (replyingMessage.messageType === 'audio' ? '🎤 Voice note' : 'Attachment'),
+              senderName: replyingMessage.senderName || (checkIsSelf(replyingMessage) ? 'You' : 'Member'),
+            } : undefined;
+            onSendMessage(content, attachment, replyPayload);
+            setReplyingMessage(null);
+          }}
           onTypingStart={onTypingStart}
           onTypingStop={onTypingStop}
           groupMembers={isGroup ? selectedGroup?.members : undefined}
         />
+      )}
+
+      {/* Group Member Call Modal */}
+      {showGroupCallModal && selectedGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm text-white">Call Group Member</h3>
+                <p className="text-xs text-neutral-400">Select a member to start an audio call</p>
+              </div>
+              <button
+                onClick={() => setShowGroupCallModal(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 max-h-72 overflow-y-auto space-y-1.5 custom-scrollbar">
+              {selectedGroup.members?.filter((m) => {
+                const mId = String(m.id || (m as any)._id);
+                return mId !== currentUserId;
+              }).length === 0 ? (
+                <p className="text-xs text-neutral-500 text-center py-4">No other members in this group</p>
+              ) : (
+                selectedGroup.members
+                  ?.filter((m) => {
+                    const mId = String(m.id || (m as any)._id);
+                    return mId !== currentUserId;
+                  })
+                  .map((member) => {
+                    const normalizedMember: User = {
+                      id: String(member.id || (member as any)._id),
+                      name: member.name,
+                      email: member.email,
+                      avatar: member.avatar,
+                      isOnline: member.isOnline,
+                      lastSeen: member.lastSeen || new Date().toISOString(),
+                    };
+                    return (
+                      <div
+                        key={normalizedMember.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-800/50 hover:bg-neutral-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Avatar
+                            name={normalizedMember.name}
+                            avatar={normalizedMember.avatar}
+                            size="sm"
+                            isOnline={normalizedMember.isOnline}
+                            showStatus={true}
+                          />
+                          <div>
+                            <p className="text-xs font-medium text-white">{normalizedMember.name}</p>
+                            <p className="text-[10px] text-neutral-400">
+                              {normalizedMember.isOnline ? 'Online' : 'Offline'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setShowGroupCallModal(false);
+                            onStartCall(normalizedMember, 'audio');
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>Call</span>
+                        </button>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Member Management Modal */}
+      {showManageMembersModal && selectedGroup && isGroupAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm text-white">Manage Group Members</h3>
+                <p className="text-xs text-neutral-400">{selectedGroup.name}</p>
+              </div>
+              <button
+                onClick={() => setShowManageMembersModal(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4 max-h-96 overflow-y-auto custom-scrollbar">
+              {/* Current Members */}
+              <div>
+                <h4 className="text-xs font-semibold text-neutral-300 mb-2">
+                  Current Members ({selectedGroup.members?.length || 0})
+                </h4>
+                <div className="space-y-1.5">
+                  {selectedGroup.members?.map((member) => {
+                    const memberId = String(member.id || (member as any)._id);
+                    const isMemberCreator = memberId === groupCreatorId;
+                    const canRemove =
+                      isGroupAdmin &&
+                      !isMemberCreator &&
+                      (isGroupCreator || memberId !== currentUserId);
+
+                    return (
+                      <div
+                        key={memberId}
+                        className="flex items-center justify-between p-2 rounded-xl bg-neutral-800/40"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar name={member.name} avatar={member.avatar} size="sm" />
+                          <div>
+                            <p className="text-xs font-medium text-white">{member.name}</p>
+                            <span className="text-[10px] text-neutral-400">
+                              {isMemberCreator ? 'Group Creator' : 'Member'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {canRemove && (
+                          <button
+                            onClick={() => handleRemoveMemberFromGroup(memberId)}
+                            disabled={actionLoading}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 transition-colors"
+                            title="Remove member"
+                          >
+                            <UserMinus className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Add Friends to Group */}
+              <div>
+                <h4 className="text-xs font-semibold text-neutral-300 mb-2">
+                  Add Friends to Group
+                </h4>
+                {(() => {
+                  const existingIds = new Set(
+                    (selectedGroup.members || []).map((m) => String(m.id || (m as any)._id))
+                  );
+                  const friendsToAdd = availableFriends.filter((f) => !existingIds.has(String(f.id)));
+
+                  if (friendsToAdd.length === 0) {
+                    return (
+                      <p className="text-xs text-neutral-500 py-2">
+                        All your friends are already in this group.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-1.5">
+                      {friendsToAdd.map((friend) => (
+                        <div
+                          key={friend.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-neutral-800/40 hover:bg-neutral-800 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Avatar name={friend.name} avatar={friend.avatar} size="sm" />
+                            <p className="text-xs font-medium text-white">{friend.name}</p>
+                          </div>
+
+                          <button
+                            onClick={() => handleAddMemberToGroup(friend.id)}
+                            disabled={actionLoading}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Add</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Sleek Delete / Confirmation Modal */}

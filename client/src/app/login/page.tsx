@@ -9,8 +9,6 @@ import { apiRequest } from '@/lib/api';
 export default function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [allowDummyUsers, setAllowDummyUsers] = useState(false);
-  const { login } = useAuth();
   const router = useRouter();
 
   // Check URL query parameters for errors (?error=...)
@@ -23,19 +21,6 @@ export default function LoginPage() {
         window.history.replaceState({}, '', '/login');
       }
     }
-  }, []);
-
-  // Check public settings from server (dummy users toggle)
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const data = await apiRequest('/auth/settings');
-        setAllowDummyUsers(!!data.allowDummyUsers);
-      } catch {
-        setAllowDummyUsers(false);
-      }
-    };
-    fetchSettings();
   }, []);
 
   // Direct Google OAuth 2.0 Flow
@@ -131,54 +116,6 @@ export default function LoginPage() {
             <span>Direct Google OAuth 2.0 Security • Auto profile sync</span>
           </div>
         </div>
-
-        {/* DUMMY USERS (ONLY SHOWN IF SUPER ADMIN TURNED ON THE SWITCH) */}
-        {allowDummyUsers && (
-          <div className="mt-6 pt-5 border-t border-neutral-800 text-center animate-in fade-in">
-            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-semibold mb-3">
-              <Sparkles className="w-3 h-3" />
-              <span>Dummy User Testing Mode Active</span>
-            </div>
-            <div className="flex gap-2 justify-center">
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={async () => {
-                  setSubmitting(true);
-                  try {
-                    await login('alice@example.com', 'password123');
-                    router.push('/');
-                  } catch (err: any) {
-                    setError(err.message);
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
-              >
-                👩 Alice (Demo)
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={async () => {
-                  setSubmitting(true);
-                  try {
-                    await login('bob@example.com', 'password123');
-                    router.push('/');
-                  } catch (err: any) {
-                    setError(err.message);
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 border border-neutral-700 transition-colors"
-              >
-                👨 Bob (Demo)
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

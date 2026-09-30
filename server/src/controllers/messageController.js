@@ -140,7 +140,7 @@ const markMessagesAsRead = async (req, res, next) => {
 const sendMessage = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const { receiverId, content, messageType = 'text', fileUrl = '', fileName = '', fileSize = 0 } = req.body;
+    const { receiverId, content, messageType = 'text', fileUrl = '', fileName = '', fileSize = 0, replyTo = null } = req.body;
 
     if (!receiverId || (!content?.trim() && !fileUrl)) {
       return res.status(400).json({ message: 'receiverId and content/attachment are required' });
@@ -173,6 +173,11 @@ const sendMessage = async (req, res, next) => {
       fileUrl,
       fileName,
       fileSize,
+      replyTo: replyTo && replyTo.id ? {
+        id: String(replyTo.id),
+        content: (replyTo.content || '').substring(0, 200),
+        senderName: replyTo.senderName || '',
+      } : undefined,
       status: 'sent',
       timestamp: new Date(),
     };
@@ -211,12 +216,13 @@ const sendMessage = async (req, res, next) => {
   }
 };
 
-// Delete single message (Sender or Admin)
+// Delete single message:
+// 1-to-1 chat: ONLY the sender can delete their own message.
+// Group chat: ONLY the group creator or message sender can delete.
 const deleteMessage = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
     const { id } = req.params;
-    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
 
     const mongoose = require('mongoose');
     if (!id || typeof id !== 'string' || !mongoose.Types.ObjectId.isValid(id)) {
@@ -234,9 +240,19 @@ const deleteMessage = async (req, res, next) => {
     let timestamp = message?.timestamp;
 
     if (message) {
-      const isSender = String(message.senderId) === String(currentUserId);
-      if (!isSender && !isSuperAdmin) {
-        return res.status(403).json({ message: 'You are not authorized to delete this message' });
+      if (message.groupId) {
+        const grp = await Group.findById(message.groupId);
+        const isGroupCreator = grp && String(grp.creator) === String(currentUserId);
+        const isSender = String(message.senderId) === String(currentUserId);
+        if (!isGroupCreator && !isSender) {
+          return res.status(403).json({ message: 'Only the message sender or group creator can delete this message' });
+        }
+      } else {
+        // Direct 1-to-1 message: ONLY the sender can delete their own message!
+        const isSender = String(message.senderId) === String(currentUserId);
+        if (!isSender) {
+          return res.status(403).json({ message: 'You can only delete your own messages' });
+        }
       }
       await Message.findByIdAndDelete(objectId);
     }
@@ -247,8 +263,8 @@ const deleteMessage = async (req, res, next) => {
       const nestedMsg = conv.messages.id(objectId);
       if (nestedMsg) {
         const isSender = String(nestedMsg.senderId) === String(currentUserId);
-        if (!isSender && !isSuperAdmin && !message) {
-          return res.status(403).json({ message: 'You are not authorized to delete this message' });
+        if (!isSender && !message) {
+          return res.status(403).json({ message: 'You can only delete your own messages' });
         }
         senderId = senderId || nestedMsg.senderId;
         receiverId = receiverId || nestedMsg.receiverId;
@@ -263,9 +279,10 @@ const deleteMessage = async (req, res, next) => {
     if (grp) {
       const nestedMsg = grp.messages.id(objectId);
       if (nestedMsg) {
+        const isGroupCreator = String(grp.creator) === String(currentUserId);
         const isSender = String(nestedMsg.senderId) === String(currentUserId);
-        if (!isSender && !isSuperAdmin && !message) {
-          return res.status(403).json({ message: 'You are not authorized to delete this message' });
+        if (!isGroupCreator && !isSender && !message) {
+          return res.status(403).json({ message: 'Only the message sender or group creator can delete this message' });
         }
         senderId = senderId || nestedMsg.senderId;
         groupId = groupId || grp._id;

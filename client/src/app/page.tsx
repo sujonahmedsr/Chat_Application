@@ -9,6 +9,7 @@ import { useWebRTC } from '@/hooks/useWebRTC';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
 import { triggerNotification } from '@/lib/notification';
+import { NotificationToast, ToastNotificationData } from '@/components/ui/NotificationToast';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { IncomingCallModal } from '@/components/call/IncomingCallModal';
@@ -48,6 +49,17 @@ export default function ChatDashboard() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const [activeToast, setActiveToast] = useState<ToastNotificationData | null>(null);
+
+  const showNotificationAlert = useCallback((title: string, body: string, onClick?: () => void) => {
+    setActiveToast({
+      id: String(Date.now()),
+      title,
+      body,
+      onClick,
+    });
+    triggerNotification(title, { body, onClick });
+  }, []);
 
 
 
@@ -267,7 +279,7 @@ export default function ChatDashboard() {
   };
 
   // Send message with End-to-End Encryption
-  const handleSendMessage = async (content: string, attachment?: any) => {
+  const handleSendMessage = async (content: string, attachment?: any, replyTo?: any) => {
     if (!currentUser || !socket) return;
     if (!selectedUser && !selectedGroup) return;
 
@@ -282,6 +294,7 @@ export default function ChatDashboard() {
       fileUrl: attachment?.fileUrl,
       fileName: attachment?.fileName,
       fileSize: attachment?.fileSize,
+      replyTo,
       status: selectedUser?.isOnline ? 'delivered' : 'sent',
       timestamp: new Date().toISOString(),
       sender: currentUser,
@@ -302,6 +315,7 @@ export default function ChatDashboard() {
       fileUrl: attachment?.fileUrl,
       fileName: attachment?.fileName,
       fileSize: attachment?.fileSize,
+      replyTo,
       tempId,
     };
 
@@ -328,6 +342,7 @@ export default function ChatDashboard() {
           const messageWithPlaintext = {
             ...response.message,
             content,
+            replyTo: response.message.replyTo || replyTo,
           };
           return prev.map((m) => (m.id === tempId ? messageWithPlaintext : m));
         });
@@ -431,21 +446,19 @@ export default function ChatDashboard() {
         displayMessage = { ...message, content: plain };
       }
 
-      const senderName = users.find((u) => u.id === message.senderId)?.name || 'Someone';
+      const sender = users.find((u) => u.id === message.senderId);
+      const senderName = sender?.name || 'Someone';
 
       if (selectedUser && message.senderId === selectedUser.id) {
         setMessages((prev) => [...prev, displayMessage]);
-        if (message.messageType !== 'call') {
-          triggerNotification(`Shofi Chat: ${senderName}`, {
-            body: displayMessage.content || 'Voice Note',
-          });
-        }
         socket.emit('message:read', { senderId: selectedUser.id });
         apiRequest(`/messages/${selectedUser.id}/read`, { method: 'PUT' }).catch(() => {});
       } else {
         if (message.messageType !== 'call') {
-          triggerNotification(`Shofi Chat: ${senderName}`, {
-            body: displayMessage.content || 'Voice Note',
+          showNotificationAlert(`New message from ${senderName}`, displayMessage.content || 'Voice Note', () => {
+            if (sender) {
+              handleSelectUser(sender);
+            }
           });
         }
         setUsers((prev) =>
@@ -474,19 +487,19 @@ export default function ChatDashboard() {
         displayMessage = { ...message, content: plain };
       }
 
-      const groupName = groups.find((g) => g.id === message.groupId)?.name || 'Group';
+      const group = groups.find((g) => g.id === message.groupId);
+      const groupName = group?.name || 'Group';
 
       if (selectedGroup && message.groupId === selectedGroup.id) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, displayMessage];
         });
-        triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: displayMessage.content || 'Voice note',
-        });
       } else {
-        triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: displayMessage.content || 'Voice note',
+        showNotificationAlert(`${groupName} • ${message.sender?.name || 'Member'}`, displayMessage.content || 'Voice note', () => {
+          if (group) {
+            handleSelectGroup(group);
+          }
         });
         setGroups((prev) =>
           prev.map((g) =>
@@ -504,15 +517,15 @@ export default function ChatDashboard() {
     // Friend requests listeners
     const handleFriendRequestReceived = (data: { from: User }) => {
       setPendingRequestsCount((prev) => prev + 1);
-      triggerNotification('Shofi Chat: Friend Request', {
-        body: `${data.from.name} sent you a friend request!`,
+      showNotificationAlert('Friend Request Received', `${data.from.name} sent you a friend request!`, () => {
+        setShowFriendModal(true);
       });
     };
 
     const handleFriendRequestAccepted = (data: { friend: User }) => {
       fetchFriends();
-      triggerNotification('Shofi Chat: Request Accepted', {
-        body: `${data.friend.name} accepted your friend request!`,
+      showNotificationAlert('Request Accepted', `${data.friend.name} accepted your friend request!`, () => {
+        handleSelectUser(data.friend);
       });
     };
 
@@ -520,6 +533,7 @@ export default function ChatDashboard() {
       fetchFriends();
       if (selectedUser?.id === userId) {
         setSelectedUser(null);
+        setMessages([]);
       }
     };
 
@@ -527,6 +541,7 @@ export default function ChatDashboard() {
       fetchFriends();
       if (selectedUser?.id === userId) {
         setSelectedUser(null);
+        setMessages([]);
       }
     };
 
@@ -662,6 +677,7 @@ export default function ChatDashboard() {
           selectedGroup={selectedGroup}
           currentUser={currentUser}
           messages={messages}
+          availableFriends={users}
           isLoadingMessages={isLoadingMessages}
           isRecipientTyping={isRecipientTyping}
           groupTypingUser={groupTypingUser}
@@ -673,10 +689,15 @@ export default function ChatDashboard() {
           onClearHistory={handleClearHistory}
           onClearGroupMessages={handleClearGroupMessages}
           onDeleteGroup={handleDeleteGroup}
+          onGroupUpdated={(updatedGroup) => {
+            setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+            setSelectedGroup(updatedGroup);
+          }}
           onBack={() => setIsMobileChatOpen(false)}
           onFriendUpdated={() => {
             fetchFriends();
             setSelectedUser(null);
+            setMessages([]);
           }}
         />
       </div>
@@ -753,6 +774,12 @@ export default function ChatDashboard() {
         onSaveProfile={updateProfile}
         onLogout={logout}
         isInitialSetup={currentUser.settings?.hasCompletedSetup === false}
+      />
+
+      {/* Floating In-App Toast Notification */}
+      <NotificationToast
+        notification={activeToast}
+        onClose={() => setActiveToast(null)}
       />
     </div>
   );

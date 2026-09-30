@@ -132,25 +132,20 @@ const getGroupMessages = async (req, res, next) => {
   }
 };
 
-// Clear all messages in a group (Group Admin or Super Admin)
+// Clear all messages in a group (Only Group Creator)
 const clearGroupMessages = async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const currentUserId = req.user._id;
-    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
 
     const group = await Group.findById(groupId);
     if (!group) {
       return res.status(404).json({ message: 'Group not found' });
     }
 
-    const isGroupAdmin =
-      group.admins.some((id) => String(id) === String(currentUserId)) ||
-      String(group.creator) === String(currentUserId) ||
-      isSuperAdmin;
-
-    if (!isGroupAdmin) {
-      return res.status(403).json({ message: 'Only group admins can clear group messages' });
+    const isGroupCreator = String(group.creator) === String(currentUserId);
+    if (!isGroupCreator) {
+      return res.status(403).json({ message: 'Only the group creator can clear group history' });
     }
 
     await Message.deleteMany({ groupId });
@@ -168,25 +163,20 @@ const clearGroupMessages = async (req, res, next) => {
   }
 };
 
-// Delete entire group (Group Admin or Super Admin)
+// Delete entire group (Only Group Creator)
 const deleteGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const currentUserId = req.user._id;
-    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
 
     const group = await Group.findById(groupId);
     if (!group) {
       return res.status(404).json({ message: 'Group not found' });
     }
 
-    const isGroupAdmin =
-      group.admins.some((id) => String(id) === String(currentUserId)) ||
-      String(group.creator) === String(currentUserId) ||
-      isSuperAdmin;
-
-    if (!isGroupAdmin) {
-      return res.status(403).json({ message: 'Only group admins can delete the group' });
+    const isGroupCreator = String(group.creator) === String(currentUserId);
+    if (!isGroupCreator) {
+      return res.status(403).json({ message: 'Only the group creator can delete the group' });
     }
 
     // Delete all messages associated with this group
@@ -205,10 +195,102 @@ const deleteGroup = async (req, res, next) => {
   }
 };
 
+// Add members to group (Group Admin or Creator only)
+const addGroupMembers = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+    const currentUserId = req.user._id;
+    const { memberIds = [] } = req.body;
+
+    if (!memberIds || memberIds.length === 0) {
+      return res.status(400).json({ message: 'Member IDs are required' });
+    }
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    const isGroupAdmin =
+      group.admins.some((id) => String(id) === String(currentUserId)) ||
+      String(group.creator) === String(currentUserId);
+
+    if (!isGroupAdmin) {
+      return res.status(403).json({ message: 'Only group admins can add members' });
+    }
+
+    // Add unique member IDs
+    const currentMemberIds = group.members.map(String);
+    memberIds.forEach((id) => {
+      if (!currentMemberIds.includes(String(id))) {
+        group.members.push(id);
+      }
+    });
+
+    await group.save();
+
+    const updatedGroup = await Group.findById(groupId)
+      .populate('members', 'name email avatar isOnline lastSeen')
+      .populate('creator', 'name email avatar');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Members added successfully',
+      group: updatedGroup,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Remove member from group (Group Admin or Creator only)
+const removeGroupMember = async (req, res, next) => {
+  try {
+    const { groupId, userId } = req.params;
+    const currentUserId = req.user._id;
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    const isGroupAdmin =
+      group.admins.some((id) => String(id) === String(currentUserId)) ||
+      String(group.creator) === String(currentUserId);
+
+    if (!isGroupAdmin) {
+      return res.status(403).json({ message: 'Only group admins can remove members' });
+    }
+
+    if (String(group.creator) === String(userId)) {
+      return res.status(400).json({ message: 'Cannot remove the group creator' });
+    }
+
+    group.members = group.members.filter((m) => String(m) !== String(userId));
+    group.admins = group.admins.filter((a) => String(a) !== String(userId));
+
+    await group.save();
+
+    const updatedGroup = await Group.findById(groupId)
+      .populate('members', 'name email avatar isOnline lastSeen')
+      .populate('creator', 'name email avatar');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Member removed successfully',
+      group: updatedGroup,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createGroup,
   getUserGroups,
   getGroupMessages,
   clearGroupMessages,
   deleteGroup,
+  addGroupMembers,
+  removeGroupMember,
 };

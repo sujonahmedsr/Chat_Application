@@ -9,6 +9,7 @@ import {
   Video,
   PhoneMissed,
   Trash2,
+  Reply,
 } from 'lucide-react';
 import { Message } from '@/types';
 
@@ -16,8 +17,10 @@ interface MessageBubbleProps {
   message: Message;
   isSelf: boolean;
   isGroup?: boolean;
+  isGroupCreator?: boolean;
   theme?: string;
   onDeleteMessage?: (messageId: string) => void;
+  onReplyMessage?: (message: Message) => void;
   canDelete?: boolean;
 }
 
@@ -29,8 +32,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   isSelf,
   isGroup,
+  isGroupCreator = false,
   theme = 'emerald',
   onDeleteMessage,
+  onReplyMessage,
   canDelete = false,
 }) => {
   const formatTime = (isoString: string) => {
@@ -177,18 +182,33 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     });
   };
 
+  const canDeleteThisMessage = isGroup ? (isSelf || isGroupCreator) : isSelf;
+
   return (
     <div className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'} my-1 group`}>
       <div className="flex items-center gap-1.5 max-w-[85%] sm:max-w-[70%]">
-        {/* Delete button for sender or admin */}
-        {isSelf && onDeleteMessage && (
-          <button
-            onClick={() => onDeleteMessage(message.id)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 self-center flex-shrink-0"
-            title="Delete Message"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+        {/* Actions for self (Reply + Delete) */}
+        {isSelf && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 self-center flex-shrink-0">
+            {onReplyMessage && (
+              <button
+                onClick={() => onReplyMessage(message)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
+                title="Reply to Message"
+              >
+                <Reply className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {canDeleteThisMessage && onDeleteMessage && (
+              <button
+                onClick={() => onDeleteMessage(message.id)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
+                title="Delete Message"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         )}
 
         <div
@@ -209,6 +229,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   Admin
                 </span>
               )}
+            </div>
+          )}
+
+          {/* QUOTED REPLY BLOCK */}
+          {message.replyTo && message.replyTo.content && (
+            <div className="mb-2 px-2.5 py-1.5 rounded-xl bg-black/30 border-l-2 border-emerald-400 text-left select-none">
+              <span className="font-semibold text-emerald-400 block text-[11px]">
+                {message.replyTo.senderName || 'Replied Message'}
+              </span>
+              <p className="text-neutral-300 line-clamp-2 text-[11px]">
+                {message.replyTo.content}
+              </p>
             </div>
           )}
 
@@ -244,15 +276,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         </div>
 
-        {/* Delete button if non-self but user is admin */}
-        {!isSelf && canDelete && onDeleteMessage && (
-          <button
-            onClick={() => onDeleteMessage(message.id)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 self-center flex-shrink-0"
-            title="Delete Message (Admin)"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+        {/* Actions for non-self (Reply, and Delete if group creator) */}
+        {!isSelf && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 self-center flex-shrink-0">
+            {onReplyMessage && (
+              <button
+                onClick={() => onReplyMessage(message)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
+                title="Reply to Message"
+              >
+                <Reply className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {canDeleteThisMessage && onDeleteMessage && (
+              <button
+                onClick={() => onDeleteMessage(message.id)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
+                title="Delete Message (Group Creator)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
