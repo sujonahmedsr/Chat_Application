@@ -266,7 +266,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     <div className="relative p-3 bg-neutral-900 border-t border-neutral-800">
       {/* GROUP @ MENTION POPUP */}
       {showMentions && filteredMembers.length > 0 && (
-        <div className="absolute bottom-16 left-12 right-12 sm:right-auto sm:w-80 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-2xl shadow-2xl z-40 overflow-hidden max-h-56 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="absolute bottom-16 left-2 right-2 sm:left-12 sm:right-auto sm:w-80 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-2xl shadow-2xl z-40 overflow-hidden max-h-56 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="px-3 py-2 border-b border-neutral-800/80 bg-neutral-950/40 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-neutral-400 flex items-center gap-1.5">
               <AtSign className="w-3.5 h-3.5 text-emerald-400" />
@@ -302,7 +302,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       {/* EMOJI PICKER POPUP */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 shadow-2xl z-30 w-72 sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="absolute bottom-16 left-2 sm:left-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 shadow-2xl z-30 w-[calc(100vw-1rem)] max-w-xs sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-800">
             <span className="text-xs font-semibold text-neutral-300">Emojis</span>
             <button

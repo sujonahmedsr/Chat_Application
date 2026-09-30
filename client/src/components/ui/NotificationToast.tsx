@@ -30,7 +30,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
   if (!notification) return null;
 
   return (
-    <div className="fixed top-5 right-5 z-50 max-w-sm w-[calc(100vw-2.5rem)] sm:w-80 animate-in fade-in slide-in-from-top-4 duration-200">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-[99999] max-w-sm w-[calc(100vw-2rem)] sm:w-84 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-auto">
       <div
         onClick={() => {
           notification.onClick?.();

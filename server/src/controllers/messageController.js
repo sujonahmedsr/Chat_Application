@@ -359,6 +359,12 @@ const clearChatHistory = async (req, res, next) => {
       { $set: { messages: [], lastMessage: null, updatedAt: new Date() } }
     );
 
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${peerId}`).emit('conversation:cleared', { peerId: String(currentUserId) });
+      getIO().to(`user:${currentUserId}`).emit('conversation:cleared', { peerId: String(peerId) });
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'Chat history cleared successfully',

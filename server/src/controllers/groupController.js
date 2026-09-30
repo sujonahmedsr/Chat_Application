@@ -2,6 +2,7 @@ const Group = require('../models/Group');
 const Message = require('../models/Message');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 const { decryptServerMessage } = require('../utils/encryption');
+const { getIO } = require('../sockets/socketManager');
 
 const MAX_GROUP_MESSAGES = 300;
 
@@ -49,7 +50,15 @@ const createGroup = async (req, res, next) => {
       $set: { lastMessage: welcomeMsg },
     });
 
-    return res.status(201).json({ group: populated });
+    const groupData = populated.toJSON ? populated.toJSON() : populated;
+    try {
+      const io = getIO();
+      members.forEach((mId) => {
+        io.to(`user:${mId}`).emit('group:created', { group: groupData });
+      });
+    } catch (e) {}
+
+    return res.status(201).json({ group: groupData });
   } catch (error) {
     next(error);
   }
@@ -153,6 +162,10 @@ const clearGroupMessages = async (req, res, next) => {
     group.lastMessage = null;
     await group.save();
 
+    try {
+      getIO().to(`group:${groupId}`).emit('group:messages:cleared', { groupId: String(groupId) });
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'Group messages cleared successfully',
@@ -184,6 +197,10 @@ const deleteGroup = async (req, res, next) => {
 
     // Delete group document
     await Group.findByIdAndDelete(groupId);
+
+    try {
+      getIO().to(`group:${groupId}`).emit('group:deleted', { groupId: String(groupId) });
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,
@@ -236,10 +253,19 @@ const addGroupMembers = async (req, res, next) => {
       .populate('members', 'name email avatar isOnline lastSeen')
       .populate('creator', 'name email avatar');
 
+    const updatedGroupData = updatedGroup.toJSON ? updatedGroup.toJSON() : updatedGroup;
+    try {
+      const io = getIO();
+      io.to(`group:${groupId}`).emit('group:updated', { group: updatedGroupData });
+      memberIds.forEach((mId) => {
+        io.to(`user:${mId}`).emit('group:created', { group: updatedGroupData });
+      });
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'Members added successfully',
-      group: updatedGroup,
+      group: updatedGroupData,
     });
   } catch (error) {
     next(error);
@@ -280,10 +306,17 @@ const removeGroupMember = async (req, res, next) => {
       .populate('members', 'name email avatar isOnline lastSeen')
       .populate('creator', 'name email avatar');
 
+    const updatedGroupData = updatedGroup.toJSON ? updatedGroup.toJSON() : updatedGroup;
+    try {
+      const io = getIO();
+      io.to(`group:${groupId}`).emit('group:updated', { group: updatedGroupData });
+      io.to(`user:${userId}`).emit('group:removed', { groupId: String(groupId) });
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'Member removed successfully',
-      group: updatedGroup,
+      group: updatedGroupData,
     });
   } catch (error) {
     next(error);

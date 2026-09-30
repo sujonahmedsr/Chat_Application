@@ -41,6 +41,7 @@ interface ChatAreaProps {
   onTypingStart: () => void;
   onTypingStop: () => void;
   onStartCall: (user: User, type: 'audio' | 'video') => void;
+  onStartGroupCall?: (groupId: string, groupName: string, targetMemberIds: string[]) => void;
   onDeleteMessage?: (messageId: string) => void;
   onClearHistory?: () => void;
   onClearGroupMessages?: (groupId: string) => void;
@@ -76,6 +77,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onTypingStart,
   onTypingStop,
   onStartCall,
+  onStartGroupCall,
   onDeleteMessage,
   onClearHistory,
   onClearGroupMessages,
@@ -88,6 +90,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showContactMenu, setShowContactMenu] = useState(false);
   const [showGroupCallModal, setShowGroupCallModal] = useState(false);
+  const [selectedGroupCallMembers, setSelectedGroupCallMembers] = useState<string[]>([]);
   const [showManageMembersModal, setShowManageMembersModal] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -411,43 +414,46 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   return (
     <main className="flex-1 flex flex-col h-full bg-neutral-950 overflow-hidden relative">
       {/* Chat Header */}
-      <header className="px-4 py-3 bg-neutral-900/95 border-b border-neutral-800/80 backdrop-blur-md flex items-center justify-between z-20">
-        <div className="flex items-center gap-3">
+      <header className="px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-900/95 border-b border-neutral-800/80 backdrop-blur-md flex items-center justify-between z-20 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {onBack && (
             <button
               onClick={onBack}
-              className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-white rounded-lg"
+              className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-white rounded-lg flex-shrink-0"
+              title="Back to Chats"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
 
-          {isGroup ? (
-            <Avatar name={selectedGroup.name} avatar={selectedGroup.avatar} size="md" />
-          ) : (
-            <Avatar
-              name={selectedUser!.name}
-              avatar={selectedUser!.avatar}
-              size="md"
-              isOnline={selectedUser!.isOnline}
-              showStatus={true}
-            />
-          )}
+          <div className="flex-shrink-0">
+            {isGroup ? (
+              <Avatar name={selectedGroup.name} avatar={selectedGroup.avatar} size="md" />
+            ) : (
+              <Avatar
+                name={selectedUser!.name}
+                avatar={selectedUser!.avatar}
+                size="md"
+                isOnline={selectedUser!.isOnline}
+                showStatus={true}
+              />
+            )}
+          </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm text-white leading-tight">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-semibold text-sm text-white leading-tight truncate max-w-[120px] xs:max-w-[160px] sm:max-w-[240px] md:max-w-none">
                 {isGroup ? selectedGroup.name : selectedUser!.name}
               </h3>
               <span
-                className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded-full font-medium"
+                className="hidden sm:inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
                 title="End-to-End Encrypted: Only chat participants can read messages"
               >
                 <Lock className="w-2.5 h-2.5 text-emerald-400" />
                 <span>E2EE</span>
               </span>
             </div>
-            <p className="text-xs">
+            <p className="text-xs truncate">
               {isGroup ? (
                 groupTypingUser ? (
                   <span className="text-emerald-400 font-medium animate-pulse">
@@ -472,7 +478,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-1 sm:gap-2 relative flex-shrink-0">
           {/* Theme Color Customizer Button */}
           <button
             onClick={() => setShowThemePicker((prev) => !prev)}
@@ -509,10 +515,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
           )}
 
-          {/* GROUP CALL ACTIONS: Opens member call modal */}
+          {/* GROUP CALL ACTIONS: Opens member selector modal */}
           {isGroup && (
             <button
-              onClick={() => setShowGroupCallModal(true)}
+              onClick={() => {
+                const otherMemberIds = (selectedGroup.members || [])
+                  .map((m) => String(m.id || (m as any)._id))
+                  .filter((id) => id !== currentUserId);
+                setSelectedGroupCallMembers(otherMemberIds);
+                setShowGroupCallModal(true);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-500/30 transition-all text-xs font-medium active:scale-95 shadow-sm"
               title="Start Group Audio Call"
             >
@@ -748,14 +760,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         />
       )}
 
-      {/* Group Member Call Modal */}
+      {/* Group Audio Call Selector Modal */}
       {showGroupCallModal && selectedGroup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-sm text-white">Call Group Member</h3>
-                <p className="text-xs text-neutral-400">Select a member to start an audio call</p>
+                <h3 className="font-semibold text-sm text-white">Start Group Audio Call</h3>
+                <p className="text-xs text-neutral-400">Select members to ring in {selectedGroup.name}</p>
               </div>
               <button
                 onClick={() => setShowGroupCallModal(false)}
@@ -765,62 +777,109 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             </div>
 
-            <div className="p-3 max-h-72 overflow-y-auto space-y-1.5 custom-scrollbar">
-              {selectedGroup.members?.filter((m) => {
-                const mId = String(m.id || (m as any)._id);
-                return mId !== currentUserId;
-              }).length === 0 ? (
-                <p className="text-xs text-neutral-500 text-center py-4">No other members in this group</p>
-              ) : (
-                selectedGroup.members
-                  ?.filter((m) => {
-                    const mId = String(m.id || (m as any)._id);
-                    return mId !== currentUserId;
-                  })
+            <div className="p-4 space-y-3">
+              {/* Select All Toggle */}
+              {(() => {
+                const otherMembers = (selectedGroup.members || []).filter(
+                  (m) => String(m.id || (m as any)._id) !== currentUserId
+                );
+                const allSelected =
+                  otherMembers.length > 0 &&
+                  selectedGroupCallMembers.length === otherMembers.length;
+
+                return (
+                  <div className="flex items-center justify-between px-2 py-1 text-xs text-neutral-400 border-b border-neutral-800 pb-2">
+                    <span>
+                      {selectedGroupCallMembers.length} of {otherMembers.length} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (allSelected) {
+                          setSelectedGroupCallMembers([]);
+                        } else {
+                          setSelectedGroupCallMembers(
+                            otherMembers.map((m) => String(m.id || (m as any)._id))
+                          );
+                        }
+                      }}
+                      className="text-emerald-400 hover:underline font-medium text-xs"
+                    >
+                      {allSelected ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              <div className="max-h-60 overflow-y-auto space-y-1.5 custom-scrollbar">
+                {selectedGroup.members
+                  ?.filter((m) => String(m.id || (m as any)._id) !== currentUserId)
                   .map((member) => {
-                    const normalizedMember: User = {
-                      id: String(member.id || (member as any)._id),
-                      name: member.name,
-                      email: member.email,
-                      avatar: member.avatar,
-                      isOnline: member.isOnline,
-                      lastSeen: member.lastSeen || new Date().toISOString(),
-                    };
+                    const mId = String(member.id || (member as any)._id);
+                    const isSelected = selectedGroupCallMembers.includes(mId);
+
                     return (
                       <div
-                        key={normalizedMember.id}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-800/50 hover:bg-neutral-800 transition-colors"
+                        key={mId}
+                        onClick={() => {
+                          setSelectedGroupCallMembers((prev) =>
+                            prev.includes(mId)
+                              ? prev.filter((id) => id !== mId)
+                              : [...prev, mId]
+                          );
+                        }}
+                        className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-950/50 border border-emerald-800/60'
+                            : 'bg-neutral-800/40 hover:bg-neutral-800'
+                        }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <Avatar
-                            name={normalizedMember.name}
-                            avatar={normalizedMember.avatar}
+                            name={member.name}
+                            avatar={member.avatar}
                             size="sm"
-                            isOnline={normalizedMember.isOnline}
+                            isOnline={member.isOnline}
                             showStatus={true}
                           />
                           <div>
-                            <p className="text-xs font-medium text-white">{normalizedMember.name}</p>
+                            <p className="text-xs font-medium text-white">{member.name}</p>
                             <p className="text-[10px] text-neutral-400">
-                              {normalizedMember.isOnline ? 'Online' : 'Offline'}
+                              {member.isOnline ? 'Online' : 'Offline'}
                             </p>
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            setShowGroupCallModal(false);
-                            onStartCall(normalizedMember, 'audio');
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                          <span>Call</span>
-                        </button>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="w-4 h-4 rounded border-neutral-700 text-emerald-600 focus:ring-emerald-500"
+                        />
                       </div>
                     );
-                  })
-              )}
+                  })}
+              </div>
+
+              {/* Start Call Button */}
+              <button
+                onClick={() => {
+                  setShowGroupCallModal(false);
+                  onStartGroupCall?.(
+                    selectedGroup.id,
+                    selectedGroup.name,
+                    selectedGroupCallMembers
+                  );
+                }}
+                disabled={selectedGroupCallMembers.length === 0}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/40"
+              >
+                <Phone className="w-4 h-4" />
+                <span>
+                  Start Group Call ({selectedGroupCallMembers.length}{' '}
+                  {selectedGroupCallMembers.length === 1 ? 'member' : 'members'})
+                </span>
+              </button>
             </div>
           </div>
         </div>

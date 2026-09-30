@@ -6,14 +6,17 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/context/SocketContext';
 import { useWebRTC } from '@/hooks/useWebRTC';
+import { useGroupCall } from '@/hooks/useGroupCall';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
-import { triggerNotification } from '@/lib/notification';
+import { triggerNotification, playNotificationSound } from '@/lib/notification';
 import { NotificationToast, ToastNotificationData } from '@/components/ui/NotificationToast';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { IncomingCallModal } from '@/components/call/IncomingCallModal';
 import { ActiveCallModal } from '@/components/call/ActiveCallModal';
+import { GroupIncomingCallModal } from '@/components/call/GroupIncomingCallModal';
+import { ActiveGroupCallModal } from '@/components/call/ActiveGroupCallModal';
 import { CallLogsModal } from '@/components/chat/CallLogsModal';
 import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
 import { FriendModal } from '@/components/chat/FriendModal';
@@ -136,6 +139,23 @@ export default function ChatDashboard() {
     toggleMirror,
     switchCamera,
   } = useWebRTC({ onCallEndedLog: handleCallEndedLog });
+
+  // Multi-Party Group Audio Conference hook
+  const {
+    callState: groupCallState,
+    activeGroupId,
+    activeGroupName,
+    participants: groupCallParticipants,
+    incomingGroupCall,
+    isMuted: isGroupMuted,
+    duration: groupCallDuration,
+    startGroupCall,
+    joinGroupCall,
+    rejectGroupCall,
+    inviteMembers: inviteToGroupCall,
+    leaveGroupCall,
+    toggleMute: toggleGroupMute,
+  } = useGroupCall(currentUser?.id);
 
   // Redirect to login if unauthenticated
   useEffect(() => {
@@ -463,6 +483,7 @@ export default function ChatDashboard() {
 
       if (selectedUser && message.senderId === selectedUser.id) {
         setMessages((prev) => [...prev, displayMessage]);
+        playNotificationSound();
         if (
           message.replyTo ||
           (currentUser?.username &&
@@ -524,6 +545,7 @@ export default function ChatDashboard() {
           if (prev.some((m) => m.id === message.id)) return prev;
           return [...prev, displayMessage];
         });
+        playNotificationSound();
         if (
           message.replyTo ||
           (currentUser?.username &&
@@ -629,6 +651,53 @@ export default function ChatDashboard() {
       }
     };
 
+    // Realtime Group Lifecycle Sync (Zero Reload)
+    const handleGroupCreated = ({ group }: { group: Group }) => {
+      setGroups((prev) => [group, ...prev.filter((g) => g.id !== group.id)]);
+      showNotificationAlert('New Group Created', `You were added to "${group.name}"`, () => {
+        handleSelectGroup(group);
+      });
+    };
+
+    const handleGroupUpdated = ({ group }: { group: Group }) => {
+      setGroups((prev) => prev.map((g) => (g.id === group.id ? group : g)));
+      setSelectedGroup((prev) => (prev?.id === group.id ? group : prev));
+    };
+
+    const handleGroupRemoved = ({ groupId }: { groupId: string }) => {
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setSelectedGroup((prev) => {
+        if (prev?.id === groupId) {
+          setIsMobileChatOpen(false);
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    const handleGroupDeleted = ({ groupId }: { groupId: string }) => {
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setSelectedGroup((prev) => {
+        if (prev?.id === groupId) {
+          setIsMobileChatOpen(false);
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    const handleGroupMessagesCleared = ({ groupId }: { groupId: string }) => {
+      if (selectedGroup?.id === groupId) {
+        setMessages([]);
+      }
+    };
+
+    const handleConversationCleared = ({ peerId }: { peerId: string }) => {
+      if (selectedUser?.id === peerId) {
+        setMessages([]);
+      }
+    };
+
     const handleAdminBlocked = (data: { message?: string }) => {
       console.warn(data.message || 'Your account has been suspended by an administrator.');
       logout();
@@ -646,6 +715,12 @@ export default function ChatDashboard() {
     socket.on('friend:request:accepted', handleFriendRequestAccepted);
     socket.on('friend:unfriended', handleUnfriended);
     socket.on('friend:blocked', handleBlocked);
+    socket.on('group:created', handleGroupCreated);
+    socket.on('group:updated', handleGroupUpdated);
+    socket.on('group:removed', handleGroupRemoved);
+    socket.on('group:deleted', handleGroupDeleted);
+    socket.on('group:messages:cleared', handleGroupMessagesCleared);
+    socket.on('conversation:cleared', handleConversationCleared);
     socket.on('user:admin:blocked', handleAdminBlocked);
     socket.on('user:admin:deleted', handleAdminDeleted);
     socket.on('message:delivered', handleMessageDelivered);
@@ -663,6 +738,12 @@ export default function ChatDashboard() {
       socket.off('friend:request:accepted', handleFriendRequestAccepted);
       socket.off('friend:unfriended', handleUnfriended);
       socket.off('friend:blocked', handleBlocked);
+      socket.off('group:created', handleGroupCreated);
+      socket.off('group:updated', handleGroupUpdated);
+      socket.off('group:removed', handleGroupRemoved);
+      socket.off('group:deleted', handleGroupDeleted);
+      socket.off('group:messages:cleared', handleGroupMessagesCleared);
+      socket.off('conversation:cleared', handleConversationCleared);
       socket.off('user:admin:blocked', handleAdminBlocked);
       socket.off('user:admin:deleted', handleAdminDeleted);
       socket.off('message:delivered', handleMessageDelivered);
@@ -676,7 +757,7 @@ export default function ChatDashboard() {
 
   if (authLoading || !currentUser) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
         <span className="text-sm font-medium">Initializing Shofi Chat...</span>
       </div>
@@ -684,9 +765,9 @@ export default function ChatDashboard() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-neutral-950 overflow-hidden select-none">
+    <div className="flex h-[100dvh] w-full max-w-full bg-neutral-950 overflow-hidden select-none">
       {/* Sidebar */}
-      <div className={`${isMobileChatOpen ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full`}>
+      <div className={`${isMobileChatOpen ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full min-w-0`}>
         <Sidebar
           currentUser={currentUser}
           users={users}
@@ -708,7 +789,7 @@ export default function ChatDashboard() {
       </div>
 
       {/* Main Chat Area */}
-      <div className={`${!isMobileChatOpen ? 'hidden md:flex' : 'flex'} flex-1 h-full`}>
+      <div className={`${!isMobileChatOpen ? 'hidden md:flex' : 'flex'} flex-1 h-full min-w-0`}>
         <ChatArea
           selectedUser={selectedUser}
           selectedGroup={selectedGroup}
@@ -722,6 +803,9 @@ export default function ChatDashboard() {
           onTypingStart={handleTypingStart}
           onTypingStop={handleTypingStop}
           onStartCall={(target, type) => startCall(target, type)}
+          onStartGroupCall={(groupId, groupName, targetMemberIds) =>
+            startGroupCall(groupId, groupName, targetMemberIds)
+          }
           onDeleteMessage={handleDeleteMessage}
           onClearHistory={handleClearHistory}
           onClearGroupMessages={handleClearGroupMessages}
@@ -739,7 +823,7 @@ export default function ChatDashboard() {
         />
       </div>
 
-      {/* Incoming Call Popup - strictly only when ringing */}
+      {/* 1-to-1 Incoming Call Popup - strictly only when ringing */}
       {incomingCall && callStatus === 'incoming' && (
         <IncomingCallModal
           incomingCall={incomingCall}
@@ -748,7 +832,7 @@ export default function ChatDashboard() {
         />
       )}
 
-      {/* Active Call Non-blocking Draggable Viewport Modal */}
+      {/* 1-to-1 Active Call Non-blocking Draggable Viewport Modal */}
       <ActiveCallModal
         callStatus={callStatus}
         callType={callType}
@@ -767,6 +851,34 @@ export default function ChatDashboard() {
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
       />
+
+      {/* Multi-Party Group Audio Conference: Incoming Call Ringing Modal */}
+      {incomingGroupCall && (
+        <GroupIncomingCallModal
+          incomingCall={incomingGroupCall}
+          onAccept={joinGroupCall}
+          onReject={rejectGroupCall}
+        />
+      )}
+
+      {/* Multi-Party Group Audio Conference: Active Room Modal */}
+      {groupCallState !== 'idle' && (
+        <ActiveGroupCallModal
+          isOpen={true}
+          groupName={activeGroupName || 'Group Call'}
+          participants={groupCallParticipants}
+          isMuted={isGroupMuted}
+          duration={groupCallDuration}
+          availableGroupMembers={
+            selectedGroup?.id === activeGroupId
+              ? selectedGroup.members?.filter((m) => m.id !== currentUser.id)
+              : users
+          }
+          onToggleMute={toggleGroupMute}
+          onLeaveCall={leaveGroupCall}
+          onInviteMembers={inviteToGroupCall}
+        />
+      )}
 
       {/* Call History Modal */}
       <CallLogsModal

@@ -13,9 +13,24 @@ function getAudioContext(): AudioContext | null {
     }
   }
   if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
   return audioCtx;
+}
+
+// Pre-warm / unlock Web Audio API on first user interaction (touch, click, keydown)
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    try {
+      const ctx = getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    } catch {}
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true });
 }
 
 /**
@@ -25,6 +40,10 @@ export function playNotificationSound() {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
 
     const now = ctx.currentTime;
     const osc1 = ctx.createOscillator();
@@ -39,8 +58,8 @@ export function playNotificationSound() {
     osc2.frequency.setValueAtTime(1760.0, now + 0.08); // A6
 
     gainNode.gain.setValueAtTime(0.08, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.05);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    gainNode.gain.exponentialRampToValueAtTime(0.22, now + 0.05);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
 
     osc1.connect(gainNode);
     osc2.connect(gainNode);
@@ -50,7 +69,7 @@ export function playNotificationSound() {
     osc1.stop(now + 0.12);
 
     osc2.start(now + 0.08);
-    osc2.stop(now + 0.35);
+    osc2.stop(now + 0.38);
   } catch (err) {
     console.debug('[Audio] Could not play notification sound:', err);
   }
@@ -126,7 +145,7 @@ export function saveNotificationPreferences(prefs: Partial<NotificationPreferenc
 }
 
 /**
- * Trigger desktop/browser notification
+ * Trigger desktop/browser notification + audio chime
  */
 export function triggerNotification(
   title: string,
@@ -151,7 +170,7 @@ export function triggerNotification(
       const notif = new Notification(title, {
         body: options?.body || 'New message on Shofi Chat',
         icon: options?.icon || 'https://api.dicebear.com/7.x/identicon/svg?seed=ShofiChat',
-        tag: options?.tag || 'shofi-chat-message',
+        tag: options?.tag || `shofi-chat-${Date.now()}`,
       });
 
       if (options?.onClick) {
