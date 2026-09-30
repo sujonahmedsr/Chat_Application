@@ -25,6 +25,7 @@ import {
   requestNotificationPermission,
   playNotificationSound,
 } from '@/lib/notification';
+import { isEncrypted, decryptMessage, getConversationId } from '@/lib/crypto';
 
 const SUPER_ADMINS = [
   'shofiqul.sujon2201@gmail.com',
@@ -346,47 +347,100 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             filteredGroups.map((g) => (
-              <div
+              <GroupItem
                 key={g.id}
-                onClick={() => onSelectGroup(g)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-2xl cursor-pointer transition-all select-none ${
-                  selectedGroup?.id === g.id
-                    ? 'bg-emerald-950/40 border border-emerald-800/40 text-white'
-                    : 'hover:bg-neutral-800/60 text-neutral-300'
-                }`}
-              >
-                <div className="relative">
-                  <Avatar name={g.name} avatar={g.avatar} size="md" />
-                  <span className="absolute -bottom-1 -right-1 bg-emerald-700 text-white text-[9px] font-bold px-1 rounded-full">
-                    {g.members?.length || 0}
-                  </span>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm text-neutral-100 truncate">
-                      {g.name}
-                    </span>
-                    {g.lastMessage?.timestamp && (
-                      <span className="text-[11px] text-neutral-400 font-mono flex-shrink-0">
-                        {new Date(g.lastMessage.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-neutral-400 truncate mt-0.5">
-                    {g.lastMessage
-                      ? `${g.lastMessage.sender?.name ? g.lastMessage.sender.name + ': ' : ''}${g.lastMessage.content || 'Attachment'}`
-                      : g.description || `${g.members?.length || 0} members`}
-                  </p>
-                </div>
-              </div>
+                group={g}
+                isSelected={selectedGroup?.id === g.id}
+                onSelect={onSelectGroup}
+                currentUserId={currentUser?.id}
+              />
             ))
           )
         )}
       </div>
     </aside>
+  );
+};
+
+interface GroupItemProps {
+  group: Group;
+  isSelected: boolean;
+  onSelect: (group: Group) => void;
+  currentUserId?: string;
+}
+
+const GroupItem: React.FC<GroupItemProps> = ({
+  group,
+  isSelected,
+  onSelect,
+  currentUserId,
+}) => {
+  const [decryptedText, setDecryptedText] = useState('');
+
+  useEffect(() => {
+    let isCancelled = false;
+    const compute = async () => {
+      if (!group.lastMessage?.content) {
+        setDecryptedText('');
+        return;
+      }
+      const raw = group.lastMessage.content;
+      if (isEncrypted(raw) && currentUserId) {
+        const convId = getConversationId(currentUserId, undefined, group.id);
+        const plain = await decryptMessage(raw, convId);
+        if (!isCancelled) setDecryptedText(plain);
+      } else {
+        if (!isCancelled) setDecryptedText(raw);
+      }
+    };
+    compute();
+    return () => {
+      isCancelled = true;
+    };
+  }, [group.lastMessage?.content, group.id, currentUserId]);
+
+  const preview =
+    decryptedText ||
+    (isEncrypted(group.lastMessage?.content)
+      ? 'Encrypted message'
+      : group.lastMessage?.content);
+
+  return (
+    <div
+      onClick={() => onSelect(group)}
+      className={`flex items-center gap-3 px-3 py-3 rounded-2xl cursor-pointer transition-all select-none ${
+        isSelected
+          ? 'bg-emerald-950/40 border border-emerald-800/40 text-white'
+          : 'hover:bg-neutral-800/60 text-neutral-300'
+      }`}
+    >
+      <div className="relative">
+        <Avatar name={group.name} avatar={group.avatar} size="md" />
+        <span className="absolute -bottom-1 -right-1 bg-emerald-700 text-white text-[9px] font-bold px-1 rounded-full">
+          {group.members?.length || 0}
+        </span>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-sm text-neutral-100 truncate">
+            {group.name}
+          </span>
+          {group.lastMessage?.timestamp && (
+            <span className="text-[11px] text-neutral-400 font-mono flex-shrink-0">
+              {new Date(group.lastMessage.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-neutral-400 truncate mt-0.5">
+          {group.lastMessage
+            ? `${group.lastMessage.sender?.name ? group.lastMessage.sender.name + ': ' : ''}${preview || 'Attachment'}`
+            : group.description || `${group.members?.length || 0} members`}
+        </p>
+      </div>
+    </div>
   );
 };

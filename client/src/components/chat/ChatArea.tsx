@@ -345,9 +345,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           )}
 
           <div>
-            <h3 className="font-semibold text-sm text-white leading-tight">
-              {isGroup ? selectedGroup.name : selectedUser!.name}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sm text-white leading-tight">
+                {isGroup ? selectedGroup.name : selectedUser!.name}
+              </h3>
+              <span
+                className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded-full font-medium"
+                title="End-to-End Encrypted: Only chat participants can read messages"
+              >
+                <Lock className="w-2.5 h-2.5 text-emerald-400" />
+                <span>E2EE</span>
+              </span>
+            </div>
             <p className="text-xs">
               {isGroup ? (
                 groupTypingUser ? (
@@ -533,6 +542,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto px-4 py-3 custom-scrollbar">
+        {/* End-to-End Encryption Privacy Banner */}
+        <div className="flex items-center justify-center my-2">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-[11px] text-neutral-400 select-none shadow-sm">
+            <Lock className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+            <span>Messages are end-to-end encrypted. Nobody, not even database admins, can read them.</span>
+          </div>
+        </div>
+
         {isLoadingMessages ? (
           <ChatAreaSkeleton />
         ) : messages.length === 0 ? (

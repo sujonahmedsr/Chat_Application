@@ -14,6 +14,7 @@ A modern, production-grade real-time communication platform built with **Next.js
 
 ## ✨ Features
 
+* **🔐 End-to-End Encryption (E2EE)**: Hardware-accelerated AES-256-GCM encryption in the browser using the native Web Crypto API (`SubtleCrypto`). Messages are encrypted before leaving the client and stored in MongoDB strictly as ciphertext (`enc:v1:...`). Database administrators, cloud hosts, and interceptors cannot read the content of any message.
 * **⚡ Real-Time Messaging**: Instant 1-to-1 and group messaging with Socket.io, real-time typing indicators, read receipts, and online/offline presence tracking.
 * **📞 HD Audio & Video Calling**: Peer-to-peer WebRTC calling with live camera preview (PiP), mute/camera toggle, audio frequency visualizers, and ringtones.
 * **🔒 Google OAuth 2.0 & Token Auth**: Secure Google Sign-In with automatic profile provisioning, JWT session tokens, and password protection.

@@ -18,6 +18,13 @@ import { CreateGroupModal } from '@/components/chat/CreateGroupModal';
 import { FriendModal } from '@/components/chat/FriendModal';
 import { AdminModal } from '@/components/admin/AdminModal';
 import { SettingsModal } from '@/components/chat/SettingsModal';
+import {
+  encryptMessage,
+  decryptMessage,
+  decryptMessageList,
+  getConversationId,
+  isEncrypted,
+} from '@/lib/crypto';
 
 export default function ChatDashboard() {
   const { user: currentUser, loading: authLoading, logout, updateProfile } = useAuth();
@@ -205,7 +212,14 @@ export default function ChatDashboard() {
     try {
       setIsLoadingMessages(true);
       const data = await apiRequest(`/messages/${targetUser.id}`);
-      setMessages(data.messages || []);
+      const rawMessages: Message[] = data.messages || [];
+      if (currentUser) {
+        const convId = getConversationId(currentUser.id, targetUser.id);
+        const decrypted = await decryptMessageList(rawMessages, convId);
+        setMessages(decrypted);
+      } else {
+        setMessages(rawMessages);
+      }
 
       await apiRequest(`/messages/${targetUser.id}/read`, { method: 'PUT' });
       if (socket) {
@@ -233,7 +247,14 @@ export default function ChatDashboard() {
     try {
       setIsLoadingMessages(true);
       const data = await apiRequest(`/groups/${group.id}/messages`);
-      setMessages(data.messages || []);
+      const rawMessages: Message[] = data.messages || [];
+      if (currentUser) {
+        const convId = getConversationId(currentUser.id, undefined, group.id);
+        const decrypted = await decryptMessageList(rawMessages, convId);
+        setMessages(decrypted);
+      } else {
+        setMessages(rawMessages);
+      }
 
       if (socket) {
         socket.emit('group:join', { groupId: group.id });
@@ -245,8 +266,8 @@ export default function ChatDashboard() {
     }
   };
 
-  // Send message
-  const handleSendMessage = (content: string, attachment?: any) => {
+  // Send message with End-to-End Encryption
+  const handleSendMessage = async (content: string, attachment?: any) => {
     if (!currentUser || !socket) return;
     if (!selectedUser && !selectedGroup) return;
 
@@ -256,7 +277,7 @@ export default function ChatDashboard() {
       senderId: currentUser.id,
       receiverId: selectedUser?.id,
       groupId: selectedGroup?.id,
-      content,
+      content, // Plaintext shown in sender UI
       messageType: attachment?.messageType || 'text',
       fileUrl: attachment?.fileUrl,
       fileName: attachment?.fileName,
@@ -268,11 +289,15 @@ export default function ChatDashboard() {
 
     setMessages((prev) => [...prev, optimisticMessage]);
 
-    // Send payload to socket
+    // Encrypt content with conversation key before sending over socket
+    const convId = getConversationId(currentUser.id, selectedUser?.id, selectedGroup?.id);
+    const encryptedContent = content ? await encryptMessage(content, convId) : '';
+
+    // Send encrypted payload to socket
     const payload = {
       receiverId: selectedUser?.id,
       groupId: selectedGroup?.id,
-      content,
+      content: encryptedContent, // ENCRYPTED: Database & Network only see ciphertext
       messageType: attachment?.messageType || 'text',
       fileUrl: attachment?.fileUrl,
       fileName: attachment?.fileName,
@@ -299,7 +324,12 @@ export default function ChatDashboard() {
             }
             return prev;
           }
-          return prev.map((m) => (m.id === tempId ? response.message : m));
+          // Display plaintext content for the sender
+          const messageWithPlaintext = {
+            ...response.message,
+            content,
+          };
+          return prev.map((m) => (m.id === tempId ? messageWithPlaintext : m));
         });
       }
     });
@@ -392,14 +422,22 @@ export default function ChatDashboard() {
     if (!socket) return;
 
     // Incoming 1-to-1 message
-    const handleReceiveMessage = (message: Message) => {
+    const handleReceiveMessage = async (message: Message) => {
+      let displayMessage = message;
+      if (message.content && isEncrypted(message.content) && currentUser) {
+        const otherId = message.senderId === currentUser.id ? message.receiverId : message.senderId;
+        const convId = getConversationId(currentUser.id, otherId);
+        const plain = await decryptMessage(message.content, convId);
+        displayMessage = { ...message, content: plain };
+      }
+
       const senderName = users.find((u) => u.id === message.senderId)?.name || 'Someone';
 
       if (selectedUser && message.senderId === selectedUser.id) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => [...prev, displayMessage]);
         if (message.messageType !== 'call') {
           triggerNotification(`Shofi Chat: ${senderName}`, {
-            body: message.content || 'Voice Note',
+            body: displayMessage.content || 'Voice Note',
           });
         }
         socket.emit('message:read', { senderId: selectedUser.id });
@@ -407,7 +445,7 @@ export default function ChatDashboard() {
       } else {
         if (message.messageType !== 'call') {
           triggerNotification(`Shofi Chat: ${senderName}`, {
-            body: message.content || 'Voice Note',
+            body: displayMessage.content || 'Voice Note',
           });
         }
         setUsers((prev) =>
@@ -416,7 +454,7 @@ export default function ChatDashboard() {
               return {
                 ...u,
                 unreadCount: (u.unreadCount || 0) + 1,
-                lastMessage: message,
+                lastMessage: displayMessage,
               };
             }
             return u;
@@ -426,26 +464,33 @@ export default function ChatDashboard() {
     };
 
     // Incoming group message
-    const handleReceiveGroupMessage = (message: Message) => {
+    const handleReceiveGroupMessage = async (message: Message) => {
       if (message.senderId === currentUser?.id) return;
+
+      let displayMessage = message;
+      if (message.content && isEncrypted(message.content) && currentUser) {
+        const convId = getConversationId(currentUser.id, undefined, message.groupId);
+        const plain = await decryptMessage(message.content, convId);
+        displayMessage = { ...message, content: plain };
+      }
 
       const groupName = groups.find((g) => g.id === message.groupId)?.name || 'Group';
 
       if (selectedGroup && message.groupId === selectedGroup.id) {
         setMessages((prev) => {
           if (prev.some((m) => m.id === message.id)) return prev;
-          return [...prev, message];
+          return [...prev, displayMessage];
         });
         triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: message.content || 'Voice note',
+          body: displayMessage.content || 'Voice note',
         });
       } else {
         triggerNotification(`${groupName}: ${message.sender?.name || 'Someone'}`, {
-          body: message.content || 'Voice note',
+          body: displayMessage.content || 'Voice note',
         });
         setGroups((prev) =>
           prev.map((g) =>
-            g.id === message.groupId ? { ...g, lastMessage: message } : g
+            g.id === message.groupId ? { ...g, lastMessage: displayMessage } : g
           )
         );
       }

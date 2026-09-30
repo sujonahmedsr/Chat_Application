@@ -1,6 +1,7 @@
 const Group = require('../models/Group');
 const Message = require('../models/Message');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
+const { decryptServerMessage } = require('../utils/encryption');
 
 const MAX_GROUP_MESSAGES = 300;
 
@@ -104,6 +105,7 @@ const getGroupMessages = async (req, res, next) => {
           const json = m.toJSON ? m.toJSON() : m;
           return {
             ...json,
+            content: decryptServerMessage(json.content),
             sender: m.senderId,
           };
         }),
@@ -120,6 +122,7 @@ const getGroupMessages = async (req, res, next) => {
         const json = m.toJSON();
         return {
           ...json,
+          content: decryptServerMessage(json.content),
           sender: m.senderId,
         };
       }),

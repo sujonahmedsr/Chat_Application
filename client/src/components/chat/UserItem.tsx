@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '@/types';
 import { Avatar } from '../ui/Avatar';
+import { decryptMessage, getConversationId, isEncrypted } from '@/lib/crypto';
 
 interface UserItemProps {
   user: User;
@@ -17,6 +18,30 @@ export const UserItem: React.FC<UserItemProps> = ({
   onSelect,
   currentUserId,
 }) => {
+  const [decryptedLastMessage, setDecryptedLastMessage] = useState<string>('');
+
+  useEffect(() => {
+    let isCancelled = false;
+    const compute = async () => {
+      if (!user.lastMessage?.content) {
+        setDecryptedLastMessage('');
+        return;
+      }
+      const raw = user.lastMessage.content;
+      if (isEncrypted(raw) && currentUserId) {
+        const convId = getConversationId(currentUserId, user.id);
+        const plain = await decryptMessage(raw, convId);
+        if (!isCancelled) setDecryptedLastMessage(plain);
+      } else {
+        if (!isCancelled) setDecryptedLastMessage(raw);
+      }
+    };
+    compute();
+    return () => {
+      isCancelled = true;
+    };
+  }, [user.lastMessage?.content, user.id, currentUserId]);
+
   const formatLastSeen = (dateString?: string) => {
     if (!dateString) return 'offline';
     try {
@@ -41,7 +66,8 @@ export const UserItem: React.FC<UserItemProps> = ({
 
     const isSelf = user.lastMessage.senderId === currentUserId;
     const prefix = isSelf ? 'You: ' : '';
-    return `${prefix}${user.lastMessage.content}`;
+    const text = decryptedLastMessage || (isEncrypted(user.lastMessage.content) ? 'Encrypted message' : user.lastMessage.content);
+    return `${prefix}${text}`;
   };
 
   return (

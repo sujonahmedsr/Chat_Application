@@ -4,6 +4,7 @@ const Group = require('../models/Group');
 const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('./presenceHandler');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
+const { encryptServerMessage } = require('../utils/encryption');
 
 const MAX_SOCKET_MESSAGES = 300;
 
@@ -69,7 +70,7 @@ const registerChatHandlers = (io, socket) => {
         socket.join(`group:${groupId}`);
         const messageData = {
           senderId,
-          content: content.trim(),
+          content: encryptServerMessage(content.trim()),
           messageType,
           fileUrl,
           fileName,
@@ -136,7 +137,7 @@ const registerChatHandlers = (io, socket) => {
       const messageData = {
         senderId,
         receiverId,
-        content: content.trim(),
+        content: encryptServerMessage(content.trim()),
         messageType,
         fileUrl,
         fileName,

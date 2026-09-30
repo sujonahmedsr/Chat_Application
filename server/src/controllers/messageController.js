@@ -2,6 +2,7 @@ const Message = require('../models/Message');
 const { Conversation } = require('../models/Conversation');
 const Group = require('../models/Group');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
+const { encryptServerMessage, decryptServerMessage } = require('../utils/encryption');
 
 const MAX_CHAT_MESSAGES = 300;
 
@@ -58,7 +59,13 @@ const getChatHistory = async (req, res, next) => {
         filteredMessages = filteredMessages.slice(-MAX_CHAT_MESSAGES);
       }
       return res.status(200).json({
-        messages: filteredMessages.map((m) => m.toJSON()),
+        messages: filteredMessages.map((m) => {
+          const json = m.toJSON ? m.toJSON() : m;
+          return {
+            ...json,
+            content: decryptServerMessage(json.content),
+          };
+        }),
       });
     }
 
@@ -79,7 +86,13 @@ const getChatHistory = async (req, res, next) => {
       .limit(MAX_CHAT_MESSAGES);
 
     return res.status(200).json({
-      messages: messages.map((m) => m.toJSON()),
+      messages: messages.map((m) => {
+        const json = m.toJSON();
+        return {
+          ...json,
+          content: decryptServerMessage(json.content),
+        };
+      }),
     });
   } catch (error) {
     next(error);
@@ -136,7 +149,7 @@ const sendMessage = async (req, res, next) => {
     const messageData = {
       senderId: currentUserId,
       receiverId,
-      content: (content || '').trim(),
+      content: encryptServerMessage((content || '').trim()),
       messageType,
       fileUrl,
       fileName,
