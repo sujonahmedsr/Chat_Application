@@ -146,6 +146,25 @@ const sendMessage = async (req, res, next) => {
       return res.status(400).json({ message: 'receiverId and content/attachment are required' });
     }
 
+    // Verify neither user has blocked the other
+    const User = require('../models/User');
+    const sender = await User.findById(currentUserId);
+    const receiver = await User.findById(receiverId);
+
+    if (!receiver) {
+      return res.status(404).json({ message: 'Receiver not found' });
+    }
+
+    const isSuperAdmin = isSuperAdminEmail(sender?.email) || sender?.role === 'admin';
+    if (!isSuperAdmin) {
+      const isBlocked =
+        receiver.blockedUsers?.some((id) => String(id) === String(currentUserId)) ||
+        sender.blockedUsers?.some((id) => String(id) === String(receiverId));
+      if (isBlocked) {
+        return res.status(403).json({ message: 'Cannot send message: user is blocked' });
+      }
+    }
+
     const messageData = {
       senderId: currentUserId,
       receiverId,

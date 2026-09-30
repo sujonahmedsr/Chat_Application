@@ -18,6 +18,9 @@ interface SearchUserResult extends User {
   isFriend: boolean;
   hasSentRequest: boolean;
   hasReceivedRequest: boolean;
+  isBlockedByMe?: boolean;
+  hasBlockedMe?: boolean;
+  isBlocked?: boolean;
 }
 
 interface FriendRequestItem {
@@ -54,33 +57,40 @@ export const FriendModal: React.FC<FriendModalProps> = ({
     }
   };
 
+  // Fetch users: returns all discoverable accounts if query is empty
+  const fetchUsers = async (query = '') => {
+    try {
+      setIsSearching(true);
+      const url = query.trim()
+        ? `/friends/search?q=${encodeURIComponent(query.trim())}`
+        : '/friends/search';
+      const data = await apiRequest(url);
+      setSearchResults(data.users || []);
+    } catch (err) {
+      console.error('Failed searching users:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchPendingRequests();
+      if (activeTab === 'search') {
+        fetchUsers(searchQuery);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, activeTab]);
 
-  // Handle Search
+  // Handle Search input debounce
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (!searchQuery.trim()) {
-        setSearchResults([]);
-        return;
-      }
-
-      try {
-        setIsSearching(true);
-        const data = await apiRequest(`/friends/search?q=${encodeURIComponent(searchQuery.trim())}`);
-        setSearchResults(data.users || []);
-      } catch (err) {
-        console.error('Failed searching users:', err);
-      } finally {
-        setIsSearching(false);
-      }
+    if (!isOpen || activeTab !== 'search') return;
+    const timer = setTimeout(() => {
+      fetchUsers(searchQuery);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, isOpen, activeTab]);
 
   // Send friend request
   const handleSendRequest = async (userId: string) => {
@@ -94,6 +104,28 @@ export const FriendModal: React.FC<FriendModalProps> = ({
       setTimeout(() => setFeedback(null), 3000);
     } catch (err: any) {
       setFeedback(err.message || 'Failed to send request');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Unblock user
+  const handleUnblock = async (userId: string) => {
+    try {
+      setActionLoadingId(userId);
+      await apiRequest(`/friends/unblock/${userId}`, { method: 'POST' });
+      setSearchResults((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? { ...u, isBlockedByMe: false, isBlocked: false }
+            : u
+        )
+      );
+      setFeedback('User unblocked!');
+      setTimeout(() => setFeedback(null), 3000);
+      onFriendAdded?.();
+    } catch (err: any) {
+      setFeedback(err.message || 'Failed to unblock user');
     } finally {
       setActionLoadingId(null);
     }
@@ -259,17 +291,11 @@ export const FriendModal: React.FC<FriendModalProps> = ({
               </div>
 
               {isSearching ? (
-                <div className="text-center py-6 text-neutral-500 text-xs">Searching...</div>
+                <div className="text-center py-6 text-neutral-500 text-xs">Searching users...</div>
               ) : searchResults.length === 0 ? (
-                searchQuery ? (
-                  <div className="text-center py-8 text-neutral-400 text-xs">
-                    No users found matching &quot;{searchQuery}&quot;
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-neutral-500 text-xs">
-                    Type a name or email address above to find users.
-                  </div>
-                )
+                <div className="text-center py-8 text-neutral-400 text-xs">
+                  {searchQuery ? `No users found matching "${searchQuery}"` : 'No other users registered on Shofi Chat yet.'}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {searchResults.map((user) => (
@@ -281,12 +307,31 @@ export const FriendModal: React.FC<FriendModalProps> = ({
                         <Avatar name={user.name} avatar={user.avatar} size="md" />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                          <p className="text-xs text-neutral-400 truncate">{user.email}</p>
+                          <p className="text-xs text-neutral-400 truncate">
+                            {user.username ? `@${user.username}` : user.email}
+                          </p>
                         </div>
                       </div>
 
                       <div>
-                        {user.isFriend ? (
+                        {user.isBlockedByMe ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center text-[11px] text-red-400 font-medium px-2 py-0.5 bg-red-950/40 rounded-lg border border-red-800/30">
+                              Blocked
+                            </span>
+                            <button
+                              onClick={() => handleUnblock(user.id)}
+                              disabled={actionLoadingId === user.id}
+                              className="px-2.5 py-1 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white text-xs font-medium transition-colors"
+                            >
+                              Unblock
+                            </button>
+                          </div>
+                        ) : user.hasBlockedMe ? (
+                          <span className="text-[11px] text-neutral-500 font-medium px-2 py-0.5 bg-neutral-800/50 rounded-lg">
+                            Unavailable
+                          </span>
+                        ) : user.isFriend ? (
                           <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-medium px-2 py-1 bg-emerald-950/40 rounded-lg border border-emerald-800/30">
                             <Check className="w-3 h-3" />
                             Friends

@@ -161,7 +161,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
   const startCall = useCallback(
     async (targetUser: User, type: 'audio' | 'video' = 'audio') => {
       if (!socket) {
-        alert('Socket connection not established. Please check your network.');
+        console.warn('Socket connection not established. Please check your network.');
         return;
       }
 
@@ -202,12 +202,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
           callType: type,
         });
       } catch (err: any) {
-        console.error('[WebRTC] Error initiating call:', err);
-        alert(
-          err.name === 'NotAllowedError'
-            ? 'Media permissions (microphone/camera) are required to place this call.'
-            : `Call failed: ${err.message}`
-        );
+        console.warn('[WebRTC] Call initiation error/permission denied:', err);
         cleanupCall();
       }
     },
@@ -225,15 +220,21 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       }
 
       const type = incomingCall.callType || 'audio';
-      setCallType(type);
-      callTypeRef.current = type;
-      setCallStatus('connected');
-      setPeerUser({
+      const peer = {
         id: incomingCall.from,
         name: incomingCall.callerName,
         avatar: incomingCall.callerAvatar,
-      });
-      targetUserIdRef.current = incomingCall.from;
+      };
+      const callerFrom = incomingCall.from;
+      const callerOffer = incomingCall.offer;
+
+      // Dismiss incoming call modal immediately
+      setIncomingCall(null);
+      setCallType(type);
+      callTypeRef.current = type;
+      setCallStatus('connected');
+      setPeerUser(peer);
+      targetUserIdRef.current = callerFrom;
 
       const constraints = {
         audio: true,
@@ -247,13 +248,13 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       localStreamRef.current = stream;
       setLocalStream(stream);
 
-      const pc = createPeerConnection(incomingCall.from);
+      const pc = createPeerConnection(callerFrom);
 
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
-      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      await pc.setRemoteDescription(new RTCSessionDescription(callerOffer));
 
       while (pendingCandidatesRef.current.length > 0) {
         const candidate = pendingCandidatesRef.current.shift();
@@ -274,12 +275,7 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
         setDuration((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
-      console.error('[WebRTC] Error answering call:', err);
-      alert(
-        err.name === 'NotAllowedError'
-          ? 'Microphone/camera access is required to accept call.'
-          : `Failed to answer call: ${err.message}`
-      );
+      console.warn('[WebRTC] Error answering call:', err);
       cleanupCall();
     }
   }, [socket, incomingCall, createPeerConnection, cleanupCall]);

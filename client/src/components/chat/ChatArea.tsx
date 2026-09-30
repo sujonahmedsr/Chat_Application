@@ -136,6 +136,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     });
   };
 
+  const isBlockedByMe = Boolean(
+    selectedUser &&
+      (selectedUser.isBlockedByMe ||
+        currentUser?.blockedUsers?.map(String).includes(String(selectedUser.id)))
+  );
+  const hasBlockedMe = Boolean(selectedUser && selectedUser.hasBlockedMe);
+  const isBlocked = isBlockedByMe || hasBlockedMe;
+
+  const handleUnblockDirect = async () => {
+    if (!selectedUser) return;
+    try {
+      setActionLoading(true);
+      setShowContactMenu(false);
+      await apiRequest(`/friends/unblock/${selectedUser.id}`, { method: 'POST' });
+      onFriendUpdated?.();
+    } catch (err: unknown) {
+      console.error(err instanceof Error ? err.message : 'Failed to unblock user');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleBlock = () => {
     if (!selectedUser) return;
     setShowContactMenu(false);
@@ -440,8 +462,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </button>
           )}
 
-          {/* 1-to-1 CALL ACTIONS: Audio & Video calls */}
-          {!isGroup && selectedUser && (
+          {/* 1-to-1 CALL ACTIONS: Audio & Video calls (hidden if blocked) */}
+          {!isGroup && selectedUser && !isBlocked && (
             <>
               {/* Audio Call */}
               <button
@@ -495,14 +517,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <UserX className="w-4 h-4 text-amber-400" />
                       <span>Unfriend</span>
                     </button>
-                    <button
-                      onClick={handleBlock}
-                      disabled={actionLoading}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-red-400 hover:bg-neutral-800 transition-colors"
-                    >
-                      <Ban className="w-4 h-4 text-red-400" />
-                      <span>Block User</span>
-                    </button>
+                    {isBlockedByMe ? (
+                      <button
+                        onClick={handleUnblockDirect}
+                        disabled={actionLoading}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-emerald-400 hover:bg-neutral-800 transition-colors"
+                      >
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>Unblock User</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleBlock}
+                        disabled={actionLoading}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-neutral-200 hover:text-red-400 hover:bg-neutral-800 transition-colors"
+                      >
+                        <Ban className="w-4 h-4 text-red-400" />
+                        <span>Block User</span>
+                      </button>
+                    )}
                   </>
                 )}
 
@@ -575,12 +608,34 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input Footer */}
-      <MessageInput
-        onSendMessage={onSendMessage}
-        onTypingStart={onTypingStart}
-        onTypingStop={onTypingStop}
-      />
+      {/* Message Input Footer or Blocked Notice */}
+      {isBlockedByMe ? (
+        <div className="p-4 bg-neutral-900 border-t border-neutral-800 text-center flex flex-col sm:flex-row items-center justify-center gap-3">
+          <span className="text-xs text-neutral-400">
+            🚫 You have blocked {selectedUser?.name}. Unblock to send messages or calls.
+          </span>
+          <button
+            onClick={handleUnblockDirect}
+            disabled={actionLoading}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+          >
+            Unblock
+          </button>
+        </div>
+      ) : hasBlockedMe ? (
+        <div className="p-4 bg-neutral-900 border-t border-neutral-800 text-center">
+          <span className="text-xs text-neutral-400">
+            You cannot send messages to this user.
+          </span>
+        </div>
+      ) : (
+        <MessageInput
+          onSendMessage={onSendMessage}
+          onTypingStart={onTypingStart}
+          onTypingStop={onTypingStop}
+          groupMembers={isGroup ? selectedGroup?.members : undefined}
+        />
+      )}
 
       {/* Sleek Delete / Confirmation Modal */}
       <ConfirmModal

@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Mic, Trash2, Check, X } from 'lucide-react';
+import { Send, Smile, Mic, Trash2, Check, X, AtSign } from 'lucide-react';
+import { User } from '@/types';
+import { Avatar } from '../ui/Avatar';
 
 interface AttachmentPayload {
   messageType: 'text' | 'image' | 'file' | 'audio' | 'call';
@@ -14,6 +16,7 @@ interface MessageInputProps {
   onSendMessage: (content: string, attachment?: AttachmentPayload) => void;
   onTypingStart: () => void;
   onTypingStop: () => void;
+  groupMembers?: User[];
 }
 
 const EMOJI_CATEGORIES = [
@@ -35,9 +38,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onSendMessage,
   onTypingStart,
   onTypingStop,
+  groupMembers = [],
 }) => {
   const [content, setContent] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Mention state
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [filteredMembers, setFilteredMembers] = useState<User[]>([]);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -51,8 +61,35 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
 
+  const checkMentionTrigger = (text: string, cursorPos: number) => {
+    if (!groupMembers || groupMembers.length === 0) {
+      setShowMentions(false);
+      return;
+    }
+
+    const textBeforeCursor = text.slice(0, cursorPos);
+    const match = textBeforeCursor.match(/@([a-zA-Z0-9._]*)$/);
+
+    if (match) {
+      const query = match[1].toLowerCase();
+      setMentionFilter(query);
+      const filtered = groupMembers.filter((m) =>
+        m.name.toLowerCase().includes(query) ||
+        (m.username && m.username.toLowerCase().includes(query)) ||
+        (m.email && m.email.toLowerCase().includes(query))
+      );
+      setFilteredMembers(filtered);
+      setMentionSelectedIndex(0);
+      setShowMentions(filtered.length > 0);
+    } else {
+      setShowMentions(false);
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    const val = e.target.value;
+    setContent(val);
+    checkMentionTrigger(val, e.target.selectionStart || 0);
 
     if (!isTypingRef.current) {
       isTypingRef.current = true;
@@ -69,6 +106,26 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }, 1500);
   };
 
+  const insertMention = (member: User) => {
+    if (!textareaRef.current) return;
+    const cursorPos = textareaRef.current.selectionStart || content.length;
+    const textBeforeCursor = content.slice(0, cursorPos);
+    const textAfterCursor = content.slice(cursorPos);
+    const mentionTag = `@${member.username || member.name} `;
+    const newBefore = textBeforeCursor.replace(/@([a-zA-Z0-9._]*)$/, mentionTag);
+    const newContent = newBefore + textAfterCursor;
+
+    setContent(newContent);
+    setShowMentions(false);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newBefore.length;
+      }
+    }, 0);
+  };
+
   const handleSend = () => {
     if (!content.trim()) return;
 
@@ -82,6 +139,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     setContent('');
     setShowEmojiPicker(false);
+    setShowMentions(false);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -89,6 +147,31 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showMentions && filteredMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % filteredMembers.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + filteredMembers.length) % filteredMembers.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        if (filteredMembers[mentionSelectedIndex]) {
+          insertMention(filteredMembers[mentionSelectedIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentions(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -181,6 +264,42 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   return (
     <div className="relative p-3 bg-neutral-900 border-t border-neutral-800">
+      {/* GROUP @ MENTION POPUP */}
+      {showMentions && filteredMembers.length > 0 && (
+        <div className="absolute bottom-16 left-12 right-12 sm:right-auto sm:w-80 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-2xl shadow-2xl z-40 overflow-hidden max-h-56 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="px-3 py-2 border-b border-neutral-800/80 bg-neutral-950/40 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-neutral-400 flex items-center gap-1.5">
+              <AtSign className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Mention group member</span>
+            </span>
+            <span className="text-[10px] text-neutral-500 font-mono">↑↓ Enter</span>
+          </div>
+
+          <div className="p-1 space-y-0.5">
+            {filteredMembers.map((member, idx) => (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => insertMention(member)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-colors ${
+                  idx === mentionSelectedIndex
+                    ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-neutral-200 hover:bg-neutral-800'
+                }`}
+              >
+                <Avatar name={member.name} avatar={member.avatar} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-white truncate">{member.name}</p>
+                  <p className="text-[10px] text-neutral-400 truncate">
+                    {member.username ? `@${member.username}` : member.email}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* EMOJI PICKER POPUP */}
       {showEmojiPicker && (
         <div className="absolute bottom-16 left-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 shadow-2xl z-30 w-72 sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -219,31 +338,63 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {/* VOICE RECORDING OVERLAY */}
+      {/* MODERN VOICE RECORDING OVERLAY */}
       {isRecording ? (
-        <div className="flex items-center justify-between bg-neutral-900 border border-emerald-500/40 rounded-2xl px-4 py-2.5 animate-pulse">
+        <div className="flex items-center justify-between bg-neutral-950/90 backdrop-blur-md border border-rose-500/40 rounded-2xl px-4 py-3 shadow-2xl shadow-rose-950/20 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
-            <span className="text-xs font-mono text-white">Recording Voice Note...</span>
-            <span className="text-xs font-mono text-emerald-400 font-bold">
-              {formatSeconds(recordingSeconds)}
-            </span>
+            {/* Pulsing Red Live indicator */}
+            <div className="relative flex items-center justify-center w-4 h-4">
+              <span className="w-4 h-4 rounded-full bg-rose-500/40 animate-ping absolute" />
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 relative shadow-sm shadow-rose-500" />
+            </div>
+
+            {/* Live recording timer */}
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-rose-400">
+                Recording Voice
+              </span>
+              <span className="text-sm font-mono font-bold text-white tracking-widest">
+                {formatSeconds(recordingSeconds)}
+              </span>
+            </div>
+
+            {/* Dynamic animated waveform equalizer bars */}
+            <div className="hidden sm:flex items-center gap-1 ml-4 h-6">
+              {[40, 75, 55, 90, 60, 100, 70, 85, 45, 95, 65, 80].map((height, i) => (
+                <span
+                  key={i}
+                  className="w-1 bg-gradient-to-t from-rose-500 to-amber-400 rounded-full animate-pulse"
+                  style={{
+                    height: `${height}%`,
+                    animationDelay: `${(i % 5) * 150}ms`,
+                    animationDuration: '600ms',
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Cancel/Discard button */}
             <button
+              type="button"
               onClick={discardRecording}
-              className="p-2 rounded-xl text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition-colors"
+              className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 border border-neutral-800 hover:border-rose-500/40 transition-all active:scale-95 flex items-center gap-1.5"
               title="Discard Recording"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs font-medium">Discard</span>
             </button>
+
+            {/* Send voice recording button */}
             <button
+              type="button"
               onClick={sendVoiceRecording}
-              className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40 transition-all active:scale-95 flex items-center gap-1.5"
               title="Send Voice Note"
             >
-              <Check className="w-5 h-5" />
+              <Send className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs font-semibold">Send</span>
             </button>
           </div>
         </div>
@@ -271,7 +422,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               value={content}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
+              placeholder={groupMembers && groupMembers.length > 0 ? "Type a message or @ to mention..." : "Type a message..."}
               rows={1}
               className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none resize-none max-h-32"
             />
@@ -291,10 +442,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             <button
               type="button"
               onClick={startRecording}
-              className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-emerald-400 transition-all active:scale-95"
+              className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-emerald-400 hover:border-emerald-500/30 border border-neutral-800 transition-all active:scale-95 group"
               title="Record Voice Note"
             >
-              <Mic className="w-5 h-5" />
+              <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
             </button>
           )}
         </div>

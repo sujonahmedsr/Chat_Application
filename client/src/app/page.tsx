@@ -681,12 +681,14 @@ export default function ChatDashboard() {
         />
       </div>
 
-      {/* Incoming Call Popup */}
-      <IncomingCallModal
-        incomingCall={incomingCall}
-        onAccept={answerCall}
-        onReject={rejectCall}
-      />
+      {/* Incoming Call Popup - strictly only when ringing */}
+      {incomingCall && callStatus === 'incoming' && (
+        <IncomingCallModal
+          incomingCall={incomingCall}
+          onAccept={answerCall}
+          onReject={rejectCall}
+        />
+      )}
 
       {/* Active Call Non-blocking Draggable Viewport Modal */}
       <ActiveCallModal

@@ -83,36 +83,56 @@ const getPendingRequests = async (req, res, next) => {
   }
 };
 
-// Search users to add as friends
+// Search users to add as friends (if query is empty, return all users for discovery)
 const searchUsers = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
     const search = req.query.q ? req.query.q.trim() : '';
 
-    if (!search) {
-      return res.status(200).json({ users: [] });
+    const currentUser = await User.findById(currentUserId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    const currentUser = await User.findById(currentUserId);
     const friendIds = (currentUser.friends || []).map(String);
     const sentIds = (currentUser.sentRequests || []).map((r) => String(r.to));
     const receivedIds = (currentUser.friendRequests || []).map((r) => String(r.from));
+    const myBlockedIds = (currentUser.blockedUsers || []).map(String);
 
-    const users = await User.find({
-      _id: { $ne: currentUserId },
-      $or: [
+    let query = { _id: { $ne: currentUserId } };
+    if (search) {
+      query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
-      ],
-    }).select('name email avatar isOnline lastSeen');
+        { username: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const users = await User.find(query)
+      .select('name email username avatar isOnline lastSeen blockedUsers')
+      .limit(60);
 
     const results = users.map((u) => {
       const uId = String(u._id);
+      const isBlockedByMe = myBlockedIds.includes(uId);
+      const userBlockedList = (u.blockedUsers || []).map(String);
+      const hasBlockedMe = userBlockedList.includes(String(currentUserId));
+
       return {
-        ...u.toJSON(),
+        id: u._id,
+        _id: u._id,
+        name: u.name,
+        email: u.email,
+        username: u.username,
+        avatar: u.avatar,
+        isOnline: isUserOnline(u._id),
+        lastSeen: u.lastSeen,
         isFriend: friendIds.includes(uId),
         hasSentRequest: sentIds.includes(uId),
         hasReceivedRequest: receivedIds.includes(uId),
+        isBlockedByMe,
+        hasBlockedMe,
+        isBlocked: isBlockedByMe || hasBlockedMe,
       };
     });
 
@@ -137,6 +157,13 @@ const sendFriendRequest = async (req, res, next) => {
 
     if (!targetUser || !currentUser) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if either user is blocked
+    const myBlockedIds = (currentUser.blockedUsers || []).map(String);
+    const targetBlockedIds = (targetUser.blockedUsers || []).map(String);
+    if (myBlockedIds.includes(String(targetUserId)) || targetBlockedIds.includes(String(currentUserId))) {
+      return res.status(403).json({ message: 'Cannot send friend request to this user' });
     }
 
     // Check if already friends
@@ -295,20 +322,31 @@ const blockUser = async (req, res, next) => {
       return res.status(400).json({ message: 'Cannot block yourself' });
     }
 
-    // Add to blockedUsers and remove from friends
+    // Add to blockedUsers, remove from friends, and clear friend requests in both directions
     await User.findByIdAndUpdate(currentUserId, {
       $addToSet: { blockedUsers: targetUserId },
-      $pull: { friends: targetUserId },
+      $pull: {
+        friends: targetUserId,
+        friendRequests: { from: targetUserId },
+        sentRequests: { to: targetUserId },
+      },
     });
 
     await User.findByIdAndUpdate(targetUserId, {
-      $pull: { friends: currentUserId },
+      $pull: {
+        friends: currentUserId,
+        friendRequests: { from: currentUserId },
+        sentRequests: { to: currentUserId },
+      },
     });
 
     try {
       const { getIO } = require('../sockets/socketManager');
       getIO().to(`user:${targetUserId}`).emit('friend:blocked', {
         userId: String(currentUserId),
+      });
+      getIO().to(`user:${currentUserId}`).emit('friend:blocked', {
+        userId: String(targetUserId),
       });
     } catch (e) {}
 
@@ -327,6 +365,16 @@ const unblockUser = async (req, res, next) => {
     await User.findByIdAndUpdate(currentUserId, {
       $pull: { blockedUsers: targetUserId },
     });
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().to(`user:${targetUserId}`).emit('friend:unblocked', {
+        userId: String(currentUserId),
+      });
+      getIO().to(`user:${currentUserId}`).emit('friend:unblocked', {
+        userId: String(targetUserId),
+      });
+    } catch (e) {}
 
     return res.status(200).json({ success: true, message: 'User unblocked' });
   } catch (error) {

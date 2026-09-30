@@ -12,6 +12,10 @@ export interface User {
   isBlockedByAdmin?: boolean;
   unreadCount?: number;
   lastMessage?: Message | null;
+  blockedUsers?: string[];
+  isBlocked?: boolean;
+  isBlockedByMe?: boolean;
+  hasBlockedMe?: boolean;
   settings?: {
     saveChatHistory?: boolean;
     chatRetentionDays?: number;

@@ -160,6 +160,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     );
   }
 
+  const renderHighlightedContent = (text: string) => {
+    const parts = text.split(/(@[a-zA-Z0-9._]+)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('@') && part.length > 1) {
+        return (
+          <span
+            key={index}
+            className="inline-block font-semibold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded text-[13px] border border-emerald-500/30 mx-0.5"
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <div className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'} my-1 group`}>
       <div className="flex items-center gap-1.5 max-w-[85%] sm:max-w-[70%]">
@@ -214,7 +231,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {/* TEXT CONTENT */}
           {message.content && (
             <p className="whitespace-pre-wrap leading-relaxed text-[14px]">
-              {message.content}
+              {renderHighlightedContent(message.content)}
             </p>
           )}
 
