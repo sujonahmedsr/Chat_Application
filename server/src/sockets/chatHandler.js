@@ -565,6 +565,132 @@ const registerChatHandlers = (io, socket) => {
       if (callback) callback({ error: 'Failed to add reaction' });
     }
   });
+
+  // ===== MESSAGE EDIT (Realtime sync & persistence) =====
+  socket.on('message:edit', async ({ messageId, newContent, receiverId, groupId }, callback) => {
+    try {
+      const mongoose = require('mongoose');
+      const userId = socket.userId;
+      if (!userId || !messageId || typeof newContent !== 'string') {
+        if (callback) callback({ error: 'Missing required parameters' });
+        return;
+      }
+
+      const trimmedContent = newContent.trim();
+      if (!trimmedContent) {
+        if (callback) callback({ error: 'Message cannot be empty' });
+        return;
+      }
+
+      let message = null;
+      try {
+        message = await Message.findById(messageId);
+      } catch (e) {}
+
+      let targetConversation = null;
+      let targetGroup = null;
+
+      if (!message) {
+        targetConversation = await Conversation.findOne({ 'messages._id': messageId });
+        if (!targetConversation) {
+          targetGroup = await Group.findOne({ 'messages._id': messageId });
+        }
+      }
+
+      // Check author authorization: only sender can edit
+      const senderId = message
+        ? String(message.senderId)
+        : targetConversation
+        ? String(targetConversation.messages.id(messageId)?.senderId)
+        : targetGroup
+        ? String(targetGroup.messages.id(messageId)?.senderId)
+        : null;
+
+      if (senderId && senderId !== String(userId)) {
+        if (callback) callback({ error: 'Unauthorized to edit this message' });
+        return;
+      }
+
+      const encryptedText = encryptServerMessage(trimmedContent);
+      const now = new Date();
+
+      if (message) {
+        message.content = encryptedText;
+        message.isEdited = true;
+        message.editedAt = now;
+        await message.save();
+      }
+
+      // Sync nested Conversation documents
+      await Conversation.updateOne(
+        { 'messages._id': messageId, 'messages.senderId': userId },
+        {
+          $set: {
+            'messages.$.content': encryptedText,
+            'messages.$.isEdited': true,
+            'messages.$.editedAt': now,
+          },
+        }
+      ).catch(() => {});
+
+      // Sync nested Group documents
+      await Group.updateOne(
+        { 'messages._id': messageId, 'messages.senderId': userId },
+        {
+          $set: {
+            'messages.$.content': encryptedText,
+            'messages.$.isEdited': true,
+            'messages.$.editedAt': now,
+          },
+        }
+      ).catch(() => {});
+
+      const editPayload = {
+        messageId: String(messageId),
+        content: trimmedContent,
+        isEdited: true,
+        editedAt: now.toISOString(),
+      };
+
+      const effectiveGroupId = groupId || message?.groupId || targetGroup?._id;
+      if (effectiveGroupId) {
+        io.to(`group:${effectiveGroupId}`).emit('message:edited', {
+          ...editPayload,
+          groupId: String(effectiveGroupId),
+        });
+      } else {
+        const otherPartyId =
+          receiverId ||
+          (message?.receiverId
+            ? String(message.receiverId) === String(userId)
+              ? String(message.senderId)
+              : String(message.receiverId)
+            : null) ||
+          (targetConversation?.participants
+            ? String(targetConversation.participants.find((p) => String(p) !== String(userId)))
+            : null);
+
+        if (otherPartyId) {
+          io.to(`user:${otherPartyId}`).emit('message:edited', {
+            ...editPayload,
+            senderId: String(userId),
+          });
+        }
+        // Sync to sender's own devices/tabs
+        socket.to(`user:${userId}`).emit('message:edited', editPayload);
+      }
+
+      if (callback) {
+        callback({
+          success: true,
+          ...editPayload,
+        });
+      }
+    } catch (err) {
+      console.error('[ChatHandler] Error editing message via socket:', err);
+      if (callback) callback({ error: 'Failed to edit message' });
+    }
+  });
 };
 
 module.exports = { registerChatHandlers };

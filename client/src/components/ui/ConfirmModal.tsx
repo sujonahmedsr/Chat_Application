@@ -31,7 +31,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200"
+        className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
       >

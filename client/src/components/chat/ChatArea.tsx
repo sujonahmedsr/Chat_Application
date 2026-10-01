@@ -46,6 +46,7 @@ interface ChatAreaProps {
   onStartGroupCall?: (groupId: string, groupName: string, targetMemberIds: string[]) => void;
   onDeleteMessage?: (messageId: string) => void;
   onReactMessage?: (messageId: string, emoji: string) => void;
+  onEditMessage?: (messageId: string, newContent: string) => void;
   onClearHistory?: () => void;
   onClearGroupMessages?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
@@ -85,6 +86,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onClearHistory,
   onClearGroupMessages,
   onReactMessage,
+  onEditMessage,
   onDeleteGroup,
   onGroupUpdated,
   onBack,
@@ -739,6 +741,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 onReplyMessage={(msg) => setReplyingMessage(msg)}
                 onJumpToMessage={handleJumpToMessage}
                 onReactMessage={onReactMessage}
+                onEditMessage={onEditMessage}
                 isHighlighted={highlightedMessageId === message.id}
                 currentUserId={currentUserId}
               />

@@ -61,6 +61,8 @@ export interface Message {
     senderName?: string;
   };
   reactions?: MessageReaction[];
+  isEdited?: boolean;
+  editedAt?: string;
   timestamp: string;
   sender?: User;
   senderName?: string;

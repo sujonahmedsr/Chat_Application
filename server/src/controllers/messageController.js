@@ -427,11 +427,104 @@ const clearChatHistory = async (req, res, next) => {
   }
 };
 
+// Edit message (Only the original sender can edit)
+const updateMessage = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Content is required' });
+    }
+
+    const mongoose = require('mongoose');
+    if (!id || typeof id !== 'string' || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid message ID' });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(id);
+    const trimmedContent = content.trim();
+    const encryptedText = encryptServerMessage(trimmedContent);
+    const now = new Date();
+
+    const message = await Message.findById(objectId);
+    if (message) {
+      if (String(message.senderId) !== String(currentUserId)) {
+        return res.status(403).json({ message: 'You can only edit your own messages' });
+      }
+      message.content = encryptedText;
+      message.isEdited = true;
+      message.editedAt = now;
+      await message.save();
+    }
+
+    // Also update in Conversation subdocuments
+    await Conversation.updateOne(
+      { 'messages._id': objectId, 'messages.senderId': currentUserId },
+      {
+        $set: {
+          'messages.$.content': encryptedText,
+          'messages.$.isEdited': true,
+          'messages.$.editedAt': now,
+        },
+      }
+    ).catch(() => {});
+
+    // Also update in Group subdocuments
+    await Group.updateOne(
+      { 'messages._id': objectId, 'messages.senderId': currentUserId },
+      {
+        $set: {
+          'messages.$.content': encryptedText,
+          'messages.$.isEdited': true,
+          'messages.$.editedAt': now,
+        },
+      }
+    ).catch(() => {});
+
+    // Realtime Socket broadcast
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      const io = getIO();
+      const editPayload = {
+        messageId: String(objectId),
+        content: trimmedContent,
+        isEdited: true,
+        editedAt: now.toISOString(),
+      };
+      if (message?.groupId) {
+        io.to(`group:${message.groupId}`).emit('message:edited', {
+          ...editPayload,
+          groupId: String(message.groupId),
+        });
+      } else if (message?.receiverId) {
+        io.to(`user:${message.receiverId}`).emit('message:edited', {
+          ...editPayload,
+          senderId: String(currentUserId),
+        });
+        io.to(`user:${currentUserId}`).emit('message:edited', editPayload);
+      }
+    } catch (e) {}
+
+    return res.status(200).json({
+      success: true,
+      messageId: String(objectId),
+      content: trimmedContent,
+      isEdited: true,
+      editedAt: now.toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getChatHistory,
   markMessagesAsRead,
   sendMessage,
   deleteMessage,
+  updateMessage,
   clearChatHistory,
   enforceMessageCap,
   MAX_CHAT_MESSAGES,

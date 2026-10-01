@@ -61,6 +61,14 @@ const nestedMessageSchema = new mongoose.Schema(
         userName: { type: String, default: '' },
       },
     ],
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
+    },
     timestamp: {
       type: Date,
       default: Date.now,

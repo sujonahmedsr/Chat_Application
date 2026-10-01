@@ -485,6 +485,42 @@ export default function ChatDashboard() {
     }
   };
 
+  // Edit message (Optimistic 0ms latency + Socket emit + REST fallback)
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    const msgId = extractId(messageId);
+    if (!msgId || !newContent.trim()) return;
+
+    const trimmed = newContent.trim();
+    const now = new Date().toISOString();
+
+    // 1. Instant optimistic local update
+    setMessages((prev) =>
+      prev.map((m) =>
+        extractId(m.id || (m as any)._id) === msgId
+          ? { ...m, content: trimmed, isEdited: true, editedAt: now }
+          : m
+      )
+    );
+
+    // 2. Broadcast edit via socket
+    if (socket) {
+      socket.emit('message:edit', {
+        messageId: msgId,
+        newContent: trimmed,
+        receiverId: extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id),
+        groupId: extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id),
+      });
+    }
+
+    // 3. Fallback REST API
+    apiRequest(`/messages/${msgId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content: trimmed }),
+    }).catch((err) => {
+      console.warn('[EditMessage] HTTP PUT fallback error:', err);
+    });
+  };
+
   // Clear full 1-to-1 chat history
   const handleClearHistory = async () => {
     if (!selectedUser) return;
@@ -1019,6 +1055,53 @@ export default function ChatDashboard() {
     };
     socket.on('message:reaction', handleReaction);
 
+    // Realtime message edited listener
+    const handleMessageEdited = ({
+      messageId,
+      content,
+      isEdited,
+      editedAt,
+    }: {
+      messageId: string;
+      content: string;
+      isEdited: boolean;
+      editedAt: string;
+    }) => {
+      const targetId = extractId(messageId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          extractId(m.id || (m as any)._id) === targetId
+            ? { ...m, content, isEdited: true, editedAt }
+            : m
+        )
+      );
+
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (extractId(u.lastMessage?.id || (u.lastMessage as any)?._id) === targetId) {
+            return {
+              ...u,
+              lastMessage: u.lastMessage ? { ...u.lastMessage, content, isEdited: true } : null,
+            };
+          }
+          return u;
+        })
+      );
+
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (extractId(g.lastMessage?.id || (g.lastMessage as any)?._id) === targetId) {
+            return {
+              ...g,
+              lastMessage: g.lastMessage ? { ...g.lastMessage, content, isEdited: true } : null,
+            };
+          }
+          return g;
+        })
+      );
+    };
+    socket.on('message:edited', handleMessageEdited);
+
     return () => {
       socket.off('message:receive', handleReceiveMessage);
       socket.off('message:sent-sync', handleReceiveMessage);
@@ -1046,6 +1129,7 @@ export default function ChatDashboard() {
       socket.off('group:typing:start', handleGroupTypingStart);
       socket.off('group:typing:stop', handleGroupTypingStop);
       socket.off('message:reaction', handleReaction);
+      socket.off('message:edited', handleMessageEdited);
     };
   }, [socket, fetchFriends, fetchGroups, fetchPendingRequestsCount, logout]);
 
@@ -1106,6 +1190,7 @@ export default function ChatDashboard() {
           }
           onDeleteMessage={handleDeleteMessage}
           onReactMessage={handleReactMessage}
+          onEditMessage={handleEditMessage}
           onClearHistory={handleClearHistory}
           onClearGroupMessages={handleClearGroupMessages}
           onDeleteGroup={handleDeleteGroup}

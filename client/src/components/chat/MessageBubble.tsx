@@ -12,6 +12,9 @@ import {
   Reply,
   SmilePlus,
   ExternalLink,
+  Copy,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { Message } from '@/types';
 
@@ -27,6 +30,7 @@ interface MessageBubbleProps {
   onReplyMessage?: (message: Message) => void;
   onJumpToMessage?: (messageId: string) => void;
   onReactMessage?: (messageId: string, emoji: string) => void;
+  onEditMessage?: (messageId: string, newContent: string) => void;
   isHighlighted?: boolean;
   canDelete?: boolean;
   currentUserId?: string;
@@ -46,11 +50,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onReplyMessage,
   onJumpToMessage,
   onReactMessage,
+  onEditMessage,
   isHighlighted = false,
   canDelete = false,
   currentUserId,
 }) => {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content || '');
+  const [isCopied, setIsCopied] = useState(false);
 
   const formatTime = (isoString: string) => {
     try {
@@ -271,6 +279,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     setShowReactionPicker(false);
   };
 
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!message.content) return;
+    navigator.clipboard.writeText(message.content);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditContent(message.content || '');
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editContent.trim();
+    if (!trimmed) return;
+    if (trimmed !== message.content) {
+      onEditMessage?.(actualMessageId, trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditContent(message.content || '');
+    setIsEditing(false);
+  };
+
   return (
     <div
       id={`message-${actualMessageId}`}
@@ -278,8 +314,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         isHighlighted ? 'bg-emerald-500/20 ring-2 ring-emerald-400/80 p-1.5' : ''
       }`}
     >
-      <div className="flex items-center gap-1.5 max-w-[85%] sm:max-w-[70%]">
-        {/* Actions for self (React + Reply + Delete) */}
+      <div className="flex items-center gap-1.5 max-w-[88%] sm:max-w-[72%]">
+        {/* Actions for self (React + Copy + Edit + Reply + Delete) */}
         {isSelf && (
           <div className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
             {/* Reaction button */}
@@ -313,10 +349,37 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 )}
               </div>
             )}
+
+            {/* Copy button */}
+            {message.content && (
+              <button
+                onClick={handleCopy}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-sky-300 hover:bg-neutral-800/80 transition-colors"
+                title={isCopied ? 'Copied to clipboard!' : 'Copy message'}
+              >
+                {isCopied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {/* Edit button */}
+            {message.content && onEditMessage && (
+              <button
+                onClick={handleStartEdit}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-300 hover:bg-neutral-800/80 transition-colors"
+                title="Edit message"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {onReplyMessage && (
               <button
                 onClick={() => onReplyMessage(message)}
-                className="p-1.5 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
                 title="Reply to Message"
               >
                 <Reply className="w-3.5 h-3.5" />
@@ -325,7 +388,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             {canDeleteThisMessage && onDeleteMessage && (
               <button
                 onClick={() => onDeleteMessage(message.id)}
-                className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
                 title="Delete Message"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -407,15 +470,58 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
-            {/* TEXT CONTENT */}
-            {message.content && (
-              <p className="whitespace-pre-wrap leading-relaxed text-[14px]">
-                {renderHighlightedContent(message.content)}
-              </p>
+            {/* TEXT CONTENT / INLINE EDITOR */}
+            {isEditing ? (
+              <div className="w-full min-w-[200px] sm:min-w-[260px] py-1">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveEdit();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEdit();
+                    }
+                  }}
+                  rows={Math.min(5, Math.max(2, editContent.split('\n').length))}
+                  className="w-full p-2.5 text-sm bg-black/40 border border-emerald-400/60 rounded-xl text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 resize-none font-normal"
+                  autoFocus
+                />
+                <div className="flex items-center justify-end gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="px-2.5 py-1 text-xs rounded-lg bg-black/30 hover:bg-black/50 text-neutral-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEdit()}
+                    disabled={!editContent.trim()}
+                    className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors flex items-center gap-1 shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              message.content && (
+                <p className="whitespace-pre-wrap leading-relaxed text-[14px]">
+                  {renderHighlightedContent(message.content)}
+                </p>
+              )
             )}
 
-            {/* TIMESTAMP & STATUS */}
+            {/* TIMESTAMP & STATUS & EDITED TAG */}
             <div className="flex items-center justify-end gap-1 mt-1 select-none">
+              {message.isEdited && (
+                <span className="text-[10px] text-neutral-300/70 italic mr-0.5" title="Edited message">
+                  (edited)
+                </span>
+              )}
               <span className="text-[10px] text-neutral-300/80 font-mono">
                 {formatTime(message.timestamp)}
               </span>
@@ -447,7 +553,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
         </div>
 
-        {/* Actions for non-self (React + Reply, and Delete if group creator) */}
+        {/* Actions for non-self (React + Copy + Reply, and Delete if group creator) */}
         {!isSelf && (
           <div className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
             {/* Reaction button */}
@@ -481,6 +587,22 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 )}
               </div>
             )}
+
+            {/* Copy button */}
+            {message.content && (
+              <button
+                onClick={handleCopy}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-sky-300 hover:bg-neutral-800/80 transition-colors"
+                title={isCopied ? 'Copied to clipboard!' : 'Copy message'}
+              >
+                {isCopied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
             {onReplyMessage && (
               <button
                 onClick={() => onReplyMessage(message)}

@@ -402,10 +402,10 @@ export const FriendModal: React.FC<FriendModalProps> = ({
         </div>
 
         {/* Tab switchers */}
-        <div className="flex border-b border-neutral-800 px-4 pt-2 gap-4">
+        <div className="flex border-b border-neutral-800 px-3 sm:px-4 pt-2 gap-3 sm:gap-4 overflow-x-auto custom-scrollbar flex-nowrap">
           <button
             onClick={() => setActiveTab('requests')}
-            className={`pb-2.5 text-xs font-semibold relative transition-colors ${
+            className={`pb-2.5 text-xs font-semibold relative transition-colors whitespace-nowrap flex-shrink-0 ${
               activeTab === 'requests'
                 ? 'text-emerald-400 border-b-2 border-emerald-500'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -420,7 +420,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('search')}
-            className={`pb-2.5 text-xs font-semibold relative transition-colors ${
+            className={`pb-2.5 text-xs font-semibold relative transition-colors whitespace-nowrap flex-shrink-0 ${
               activeTab === 'search'
                 ? 'text-emerald-400 border-b-2 border-emerald-500'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -433,7 +433,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
               setActiveTab('blocked');
               fetchBlockedUsers();
             }}
-            className={`pb-2.5 text-xs font-semibold relative transition-colors ${
+            className={`pb-2.5 text-xs font-semibold relative transition-colors whitespace-nowrap flex-shrink-0 ${
               activeTab === 'blocked'
                 ? 'text-rose-400 border-b-2 border-rose-500'
                 : 'text-neutral-400 hover:text-neutral-200'

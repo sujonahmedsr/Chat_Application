@@ -256,13 +256,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 className="hidden"
               />
 
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4">
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="relative group cursor-pointer rounded-2xl overflow-hidden ring-2 ring-emerald-500/30 hover:ring-emerald-500 transition-all flex-shrink-0"
+                  className="relative group cursor-pointer w-20 h-20 rounded-full ring-2 ring-emerald-500/40 hover:ring-emerald-400 transition-all flex-shrink-0 overflow-hidden shadow-lg bg-neutral-800 flex items-center justify-center"
+                  title="Change Profile Photo"
                 >
-                  <Avatar name={name || 'User'} avatar={avatar} size="lg" />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-medium gap-0.5">
+                  {avatar ? (
+                    <img
+                      src={avatar}
+                      alt={name || 'Profile'}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold text-xl shadow-inner">
+                      {(name || 'U').slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-medium gap-0.5">
                     <Camera className="w-4 h-4 text-emerald-400" />
                     <span>Change</span>
                   </div>
@@ -274,11 +285,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Upload a custom image from your device or gallery
                   </p>
 
-                  <div className="flex items-center gap-2 mt-2.5">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mt-2.5">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Upload Photo</span>
@@ -483,7 +494,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Danger Zone: Delete Profile & Account */}
             {!isSuperAdmin && !isInitialSetup && (
-              <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-900/40 flex items-center justify-between gap-4">
+              <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
                   <h5 className="text-xs font-semibold text-rose-300 flex items-center gap-1.5">
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
@@ -500,7 +511,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     setDeleteError('');
                     setShowDeleteProfileModal(true);
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold transition-all flex items-center gap-1.5 flex-shrink-0"
+                  className="w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold transition-all flex items-center gap-1.5 flex-shrink-0"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Delete Profile</span>
@@ -510,24 +521,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-4 border-t border-neutral-800 flex items-center justify-between gap-3">
+          <div className="pt-4 border-t border-neutral-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
             {onLogout ? (
               <button
                 type="button"
                 onClick={onLogout}
-                className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-red-500/20 text-neutral-400 hover:text-red-400 border border-neutral-700 text-xs font-medium flex items-center gap-2 transition-colors"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-red-500/20 text-neutral-400 hover:text-red-400 border border-neutral-700 text-xs font-medium flex items-center justify-center gap-2 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Logout</span>
               </button>
             ) : <div />}
 
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {!isInitialSetup && (
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-neutral-300 transition-colors"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-neutral-300 transition-colors text-center"
                 >
                   Cancel
                 </button>
@@ -535,7 +546,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
               >
                 {saving ? (
                   <>
