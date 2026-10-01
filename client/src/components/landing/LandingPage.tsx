@@ -109,99 +109,23 @@ export const LandingPage: React.FC = () => {
           </Link>
         </div>
 
-        {/* LIVE UI PREVIEW MOCKUP */}
-        <div className="mt-14 sm:mt-18 max-w-3xl mx-auto rounded-3xl p-1 bg-gradient-to-b from-neutral-700/40 via-neutral-800/20 to-transparent shadow-2xl">
-          <div className="bg-neutral-900/90 rounded-[22px] border border-neutral-800/80 overflow-hidden backdrop-blur-2xl">
-            {/* Mock Window Top Bar */}
-            <div className="px-5 py-3.5 bg-neutral-950/70 border-b border-neutral-800/80 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-rose-500/80" />
-                <span className="w-3 h-3 rounded-full bg-amber-500/80" />
-                <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                <span className="ml-2 text-xs font-semibold text-neutral-300">Shofi Chat • Live Room</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Connected
-                </span>
-              </div>
-            </div>
-
-            {/* Mock Chat Body */}
-            <div className="p-6 space-y-4 text-left font-sans">
-              {/* Message Left */}
-              <div className="flex items-start gap-3 max-w-md">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-md">
-                  S
-                </div>
-                <div>
-                  <div className="bg-neutral-800/90 border border-neutral-700/60 rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-neutral-200 shadow-md">
-                    <p className="font-semibold text-[11px] text-purple-300 mb-0.5">Sujon Ahmed</p>
-                    <p>Hey! Check out this product launch demo video:</p>
-                    <span className="text-sky-400 underline font-medium mt-1 inline-block">
-                      https://youtube.com/watch?v=demo-chat
-                    </span>
-                    <div className="text-[10px] text-neutral-400 mt-1 flex justify-end">10:42 AM</div>
-                  </div>
-                  {/* Reaction badge */}
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="px-2 py-0.5 rounded-full bg-neutral-800 border border-neutral-700 text-[11px] flex items-center gap-1">
-                      <span>🔥</span>
-                      <span className="text-[10px] font-bold text-neutral-300">3</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-600/80 text-[11px] flex items-center gap-1 text-emerald-300">
-                      <span>❤️</span>
-                      <span className="text-[10px] font-bold">1</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Message Right (Self) */}
-              <div className="flex items-start justify-end gap-3">
-                <div className="max-w-md flex flex-col items-end">
-                  <div className="bg-emerald-700/90 border border-emerald-600/40 rounded-2xl rounded-tr-sm px-4 py-2.5 text-xs text-white shadow-md">
-                    <p>Awesome! The audio call from my phone to your desktop was crystal clear too!</p>
-                    <div className="text-[10px] text-emerald-200/80 mt-1 flex items-center justify-end gap-1">
-                      <span>10:43 AM</span>
-                      <CheckCheck className="w-3.5 h-3.5 text-sky-300" />
-                    </div>
-                  </div>
-                  {/* Reaction badge self */}
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-600/80 text-[11px] flex items-center gap-1 text-emerald-300">
-                      <span>👍</span>
-                      <span className="text-[10px] font-bold">2</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Voice Call Pill */}
-              <div className="flex justify-center my-2">
-                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-2xl bg-neutral-950/80 border border-neutral-800 text-xs">
-                  <div className="w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <PhoneCall className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <span className="font-semibold text-neutral-200">Voice Call Ended</span>
-                    <span className="text-neutral-400 ml-2 font-mono text-[11px]">Duration: 12m 45s</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Mock Input Bar */}
-            <div className="p-3 bg-neutral-950/80 border-t border-neutral-800 flex items-center gap-3">
-              <div className="flex-1 bg-neutral-800/80 border border-neutral-700/60 rounded-xl px-4 py-2 text-xs text-neutral-400 flex items-center justify-between">
-                <span>Type a message, mention @someone, or paste a link...</span>
-                <SmilePlus className="w-4 h-4 text-neutral-400" />
-              </div>
-              <button className="px-4 py-2 rounded-xl bg-emerald-500 text-neutral-950 font-bold text-xs shadow-md">
-                Send
-              </button>
-            </div>
+        {/* Quick Highlights Pill Bar */}
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs text-neutral-400">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>0-Latency WebSockets</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Mobile ↔ Desktop Calls</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>End-to-End Encrypted</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Instant Realtime Block</span>
           </div>
         </div>
       </section>
