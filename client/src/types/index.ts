@@ -36,6 +36,12 @@ export interface Group {
   updatedAt?: string;
 }
 
+export interface MessageReaction {
+  emoji: string;
+  userId: string;
+  userName?: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -54,6 +60,7 @@ export interface Message {
     content: string;
     senderName?: string;
   };
+  reactions?: MessageReaction[];
   timestamp: string;
   sender?: User;
   senderName?: string;

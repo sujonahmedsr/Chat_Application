@@ -45,6 +45,7 @@ interface ChatAreaProps {
   onStartCall: (user: User, type: 'audio' | 'video') => void;
   onStartGroupCall?: (groupId: string, groupName: string, targetMemberIds: string[]) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onReactMessage?: (messageId: string, emoji: string) => void;
   onClearHistory?: () => void;
   onClearGroupMessages?: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
@@ -83,6 +84,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onDeleteMessage,
   onClearHistory,
   onClearGroupMessages,
+  onReactMessage,
   onDeleteGroup,
   onGroupUpdated,
   onBack,
@@ -736,7 +738,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 onDeleteMessage={onDeleteMessage ? requestDeleteMessage : undefined}
                 onReplyMessage={(msg) => setReplyingMessage(msg)}
                 onJumpToMessage={handleJumpToMessage}
+                onReactMessage={onReactMessage}
                 isHighlighted={highlightedMessageId === message.id}
+                currentUserId={currentUserId}
               />
             );
           })

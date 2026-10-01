@@ -64,6 +64,13 @@ const messageSchema = new mongoose.Schema(
       content: { type: String, default: '' },
       senderName: { type: String, default: '' },
     },
+    reactions: [
+      {
+        emoji: { type: String, required: true, maxlength: 10 },
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        userName: { type: String, default: '' },
+      },
+    ],
     timestamp: {
       type: Date,
       default: Date.now,

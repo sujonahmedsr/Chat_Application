@@ -545,6 +545,20 @@ export default function ChatDashboard() {
     }
   };
 
+  // React to a message with an emoji
+  const handleReactMessage = useCallback(
+    (messageId: string, emoji: string) => {
+      if (!socket) return;
+      socket.emit('message:react', {
+        messageId,
+        emoji,
+        receiverId: selectedUser?.id,
+        groupId: selectedGroup?.id,
+      });
+    },
+    [socket, selectedUser?.id, selectedGroup?.id]
+  );
+
   // Socket event listeners (Ref-based for zero stale closures & instantaneous multi-device sync)
   useEffect(() => {
     if (!socket) return;
@@ -791,16 +805,19 @@ export default function ChatDashboard() {
     };
 
     const handleBlocked = ({ userId }: { userId: string }) => {
-      fetchFriends();
       const targetUid = extractId(userId);
+      // Instantly remove from local friends list (no network call)
+      setUsers((prev) => prev.filter((u) => extractId(u.id || (u as any)._id) !== targetUid));
       const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
       if (currentSelectedId === targetUid) {
         setSelectedUser(null);
         setMessages([]);
+        setIsMobileChatOpen(false);
       }
     };
 
-    const handleUnblocked = () => {
+    const handleUnblocked = ({ userId }: { userId: string }) => {
+      // Unblock doesn't auto-add to friends, but refresh list to update block status
       fetchFriends();
     };
 
@@ -963,6 +980,18 @@ export default function ChatDashboard() {
     socket.on('group:typing:start', handleGroupTypingStart);
     socket.on('group:typing:stop', handleGroupTypingStop);
 
+    // Realtime message reactions
+    const handleReaction = ({ messageId, reactions }: { messageId: string; reactions: any[] }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          extractId(m.id || (m as any)._id) === extractId(messageId)
+            ? { ...m, reactions }
+            : m
+        )
+      );
+    };
+    socket.on('message:reaction', handleReaction);
+
     return () => {
       socket.off('message:receive', handleReceiveMessage);
       socket.off('message:sent-sync', handleReceiveMessage);
@@ -989,6 +1018,7 @@ export default function ChatDashboard() {
       socket.off('typing:stop', handleRemoteTypingStop);
       socket.off('group:typing:start', handleGroupTypingStart);
       socket.off('group:typing:stop', handleGroupTypingStop);
+      socket.off('message:reaction', handleReaction);
     };
   }, [socket, fetchFriends, fetchGroups, fetchPendingRequestsCount, logout]);
 
@@ -1044,6 +1074,7 @@ export default function ChatDashboard() {
             startGroupCall(groupId, groupName, targetMemberIds)
           }
           onDeleteMessage={handleDeleteMessage}
+          onReactMessage={handleReactMessage}
           onClearHistory={handleClearHistory}
           onClearGroupMessages={handleClearGroupMessages}
           onDeleteGroup={handleDeleteGroup}

@@ -387,11 +387,15 @@ const blockUser = async (req, res, next) => {
 
     try {
       const { getIO } = require('../sockets/socketManager');
+      // Tell the blocked user that they were blocked by someone
       getIO().to(`user:${targetUserId}`).emit('friend:blocked', {
         userId: String(currentUserId),
+        blockedBy: 'other',
       });
+      // Tell the blocker that they initiated the block
       getIO().to(`user:${currentUserId}`).emit('friend:blocked', {
         userId: String(targetUserId),
+        blockedBy: 'self',
       });
     } catch (e) {}
 
@@ -415,9 +419,11 @@ const unblockUser = async (req, res, next) => {
       const { getIO } = require('../sockets/socketManager');
       getIO().to(`user:${targetUserId}`).emit('friend:unblocked', {
         userId: String(currentUserId),
+        unblockedBy: 'other',
       });
       getIO().to(`user:${currentUserId}`).emit('friend:unblocked', {
         userId: String(targetUserId),
+        unblockedBy: 'self',
       });
     } catch (e) {}
 

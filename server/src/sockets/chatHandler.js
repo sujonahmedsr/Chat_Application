@@ -413,6 +413,84 @@ const registerChatHandlers = (io, socket) => {
       senderId: socket.userId,
     });
   });
+
+  // ===== MESSAGE REACTION (Emoji Toggle) =====
+  socket.on('message:react', async ({ messageId, emoji, receiverId, groupId }, callback) => {
+    try {
+      const userId = socket.userId;
+      if (!userId || !messageId || !emoji) return;
+
+      const user = await User.findById(userId, 'name');
+      const reaction = { emoji, userId, userName: user?.name || '' };
+
+      const message = await Message.findById(messageId);
+      if (!message) {
+        if (callback) callback({ error: 'Message not found' });
+        return;
+      }
+
+      if (!message.reactions) message.reactions = [];
+
+      // Toggle: if same emoji by same user exists, remove it; otherwise add/replace
+      const existingIdx = message.reactions.findIndex(
+        (r) => String(r.userId) === String(userId) && r.emoji === emoji
+      );
+
+      if (existingIdx >= 0) {
+        message.reactions.splice(existingIdx, 1);
+      } else {
+        // Remove any previous reaction from this user first
+        message.reactions = message.reactions.filter(
+          (r) => String(r.userId) !== String(userId)
+        );
+        message.reactions.push(reaction);
+      }
+
+      await message.save();
+
+      // Sync nested documents
+      const reactionsData = message.reactions.map((r) => ({
+        emoji: r.emoji,
+        userId: r.userId,
+        userName: r.userName,
+      }));
+
+      if (message.groupId) {
+        await Group.updateOne(
+          { 'messages._id': messageId },
+          { $set: { 'messages.$.reactions': reactionsData } }
+        );
+      } else if (message.receiverId) {
+        await Conversation.updateOne(
+          { 'messages._id': messageId },
+          { $set: { 'messages.$.reactions': reactionsData } }
+        );
+      }
+
+      const emitPayload = {
+        messageId: String(messageId),
+        reactions: reactionsData,
+      };
+
+      // Broadcast to relevant parties
+      const effectiveGroupId = groupId || message.groupId;
+      if (effectiveGroupId) {
+        io.to(`group:${effectiveGroupId}`).emit('message:reaction', emitPayload);
+      } else {
+        const targetId =
+          String(message.receiverId) === String(userId)
+            ? String(message.senderId)
+            : String(message.receiverId);
+        io.to(`user:${targetId}`).emit('message:reaction', emitPayload);
+        io.to(`user:${userId}`).emit('message:reaction', emitPayload);
+      }
+
+      if (callback) callback({ success: true, reactions: reactionsData });
+    } catch (err) {
+      console.error('[ChatHandler] Error handling reaction:', err);
+      if (callback) callback({ error: 'Failed to add reaction' });
+    }
+  });
 };
 
 module.exports = { registerChatHandlers };

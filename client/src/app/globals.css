@@ -82,9 +82,28 @@ audio.custom-audio-player-light::-webkit-media-controls-time-remaining-display {
   background: linear-gradient(
     90deg,
     rgba(38, 38, 43, 0.8) 0%,
-    rgba(60, 60, 68, 0.9) 50%,
+    rgba(55, 55, 62, 0.9) 40%,
+    rgba(70, 70, 78, 0.95) 50%,
+    rgba(55, 55, 62, 0.9) 60%,
     rgba(38, 38, 43, 0.8) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite ease-in-out;
+}
+
+/* Staggered fade-in for skeleton items (WhatsApp/Telegram style) */
+@keyframes skeletonFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.skeleton-stagger {
+  opacity: 0;
+  animation: skeletonFadeIn 0.35s ease-out forwards;
 }

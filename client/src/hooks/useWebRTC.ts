@@ -7,11 +7,14 @@ import { sounds } from '@/lib/sound';
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
+    // Google STUN (free, reliable)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    // Metered.ca free TURN servers (500GB/month free tier)
+    // These are public relay servers that handle Symmetric NAT (mobile 4G/5G)
     {
       urls: [
         'turn:openrelay.metered.ca:80',
@@ -20,6 +23,17 @@ const ICE_SERVERS: RTCConfiguration = {
       ],
       username: 'openrelayproject',
       credential: 'openrelayproject',
+    },
+    // Additional TURN for redundancy
+    {
+      urls: [
+        'turn:standard.relay.metered.ca:80',
+        'turn:standard.relay.metered.ca:80?transport=tcp',
+        'turn:standard.relay.metered.ca:443',
+        'turn:standard.relay.metered.ca:443?transport=tcp',
+      ],
+      username: 'e8dd65b92f7cd19ce9771bbb',
+      credential: '4+MqvEaR/4GdpJ/B',
     },
     {
       urls: 'turn:relay1.expressturn.com:3478',
@@ -45,6 +59,53 @@ const unlockAudioPlayback = () => {
       setTimeout(() => ctx.close().catch(() => {}), 200);
     }
   } catch {}
+};
+
+// Ensure audio playback on all platforms — especially mobile browsers
+// Uses AudioContext as primary audio pipeline, with HTMLAudioElement as backup
+const ensureAudioPlayback = async (
+  stream: MediaStream,
+  internalAudioEl: HTMLAudioElement | null,
+  remoteAudioEl: HTMLAudioElement | null
+) => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      // Route remote audio through AudioContext for guaranteed playback on mobile
+      const source = ctx.createMediaStreamSource(stream);
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 1.0;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      // After audio element takes over, disconnect AudioContext to avoid double audio
+      setTimeout(() => {
+        try {
+          source.disconnect();
+          gainNode.disconnect();
+          ctx.close();
+        } catch {}
+      }, 3000);
+    }
+  } catch (e) {
+    console.warn('[WebRTC] AudioContext playback fallback:', e);
+  }
+
+  // Also set on HTML audio elements as backup
+  if (internalAudioEl) {
+    internalAudioEl.srcObject = stream;
+    internalAudioEl.volume = 1.0;
+    internalAudioEl.muted = false;
+    internalAudioEl.play().catch((err) => console.warn('[WebRTC] internalAudio play error:', err));
+  }
+  if (remoteAudioEl) {
+    remoteAudioEl.srcObject = stream;
+    remoteAudioEl.volume = 1.0;
+    remoteAudioEl.play().catch(() => {});
+  }
 };
 
 interface UseWebRTCOptions {
@@ -131,16 +192,9 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
   useEffect(() => {
     if (remoteStream) {
-      if (internalAudioRef.current) {
-        internalAudioRef.current.srcObject = remoteStream;
-        internalAudioRef.current.play().catch((err) => {
-          console.warn('[WebRTC] internalAudio play error:', err);
-        });
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.play().catch(() => {});
-      }
+      // Use the enhanced audio playback that handles mobile browsers
+      ensureAudioPlayback(remoteStream, internalAudioRef.current, remoteAudioRef.current);
+
       if (remoteVideoRef.current && callTypeRef.current === 'video') {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play().catch(() => {});
@@ -226,14 +280,9 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
             : new MediaStream([event.track]);
         setRemoteStream(stream);
 
-        if (internalAudioRef.current) {
-          internalAudioRef.current.srcObject = stream;
-          internalAudioRef.current.play().catch((e) => console.warn('[WebRTC] internalAudio play error:', e));
-        }
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = stream;
-          remoteAudioRef.current.play().catch(() => {});
-        }
+        // Ensure audio plays on ALL platforms including mobile
+        ensureAudioPlayback(stream, internalAudioRef.current, remoteAudioRef.current);
+
         if (callTypeRef.current === 'video' && remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream;
           remoteVideoRef.current.play().catch(() => {});
@@ -241,9 +290,30 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       };
 
       pc.onconnectionstatechange = () => {
+        console.log('[WebRTC] Connection state:', pc.connectionState);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
           cleanupCall();
         }
+      };
+
+      // ICE connection state monitoring with automatic restart
+      pc.oniceconnectionstatechange = () => {
+        console.log('[WebRTC] ICE connection state:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') {
+          console.log('[WebRTC] ICE failed — attempting restart...');
+          pc.restartIce();
+          // If still failed after 10s, cleanup
+          setTimeout(() => {
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+              console.log('[WebRTC] ICE restart failed — ending call');
+              cleanupCall();
+            }
+          }, 10000);
+        }
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log('[WebRTC] ICE gathering state:', pc.iceGatheringState);
       };
 
       return pc;
