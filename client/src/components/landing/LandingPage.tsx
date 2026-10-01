@@ -38,7 +38,7 @@ export const LandingPage: React.FC = () => {
               <MessageSquare className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="text-base font-bold tracking-tight bg-gradient-to-r from-white via-neutral-100 to-neutral-400 bg-clip-text text-transparent">
+              <span className="text-base font-bold tracking-tight bg-gradient-to-r from-white via-neutral-100 to-neutral-400 bg-clip-text text-transparent ">
                 Shofi Chat
               </span>
               <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
