@@ -33,7 +33,7 @@ export const LandingPage: React.FC = () => {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-neutral-950/70 border-b border-neutral-800/80 transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand Logo */}
-          <div className="flex items-center gap-3">
+          <a href='/' className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/30">
               <MessageSquare className="w-5 h-5 text-white" />
             </div>
@@ -41,11 +41,9 @@ export const LandingPage: React.FC = () => {
               <span className="text-base font-bold tracking-tight bg-gradient-to-r from-white via-neutral-100 to-neutral-400 bg-clip-text text-transparent ">
                 Shofi Chat
               </span>
-              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
-                Realtime Hub
-              </span>
+
             </div>
-          </div>
+          </a>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
