@@ -54,15 +54,12 @@ const registerChatHandlers = (io, socket) => {
       if (receiverId) {
         const receiver = await User.findById(receiverId);
         const sender = await User.findById(senderId);
-        const isSuperAdmin = isSuperAdminEmail(sender?.email) || sender?.role === 'admin';
-        if (!isSuperAdmin) {
-          const isBlocked =
-            receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
-            sender?.blockedUsers?.some((id) => String(id) === String(receiverId));
-          if (isBlocked) {
-            if (callback) callback({ error: 'Cannot send message to this user' });
-            return;
-          }
+        const isBlocked =
+          receiver?.blockedUsers?.some((id) => String(id) === String(senderId)) ||
+          sender?.blockedUsers?.some((id) => String(id) === String(receiverId));
+        if (isBlocked) {
+          if (callback) callback({ error: 'Cannot send message to this user. User is blocked.' });
+          return;
         }
       }
 
@@ -417,75 +414,152 @@ const registerChatHandlers = (io, socket) => {
   // ===== MESSAGE REACTION (Emoji Toggle) =====
   socket.on('message:react', async ({ messageId, emoji, receiverId, groupId }, callback) => {
     try {
+      const mongoose = require('mongoose');
       const userId = socket.userId;
-      if (!userId || !messageId || !emoji) return;
-
-      const user = await User.findById(userId, 'name');
-      const reaction = { emoji, userId, userName: user?.name || '' };
-
-      const message = await Message.findById(messageId);
-      if (!message) {
-        if (callback) callback({ error: 'Message not found' });
+      if (!userId || !messageId || !emoji) {
+        if (callback) callback({ error: 'Missing required parameters' });
         return;
       }
 
-      if (!message.reactions) message.reactions = [];
+      const user = await User.findById(userId, 'name');
+      const userName = user?.name || '';
+      const reaction = { emoji, userId: String(userId), userName };
 
-      // Toggle: if same emoji by same user exists, remove it; otherwise add/replace
-      const existingIdx = message.reactions.findIndex(
-        (r) => String(r.userId) === String(userId) && r.emoji === emoji
-      );
+      let message = null;
+      try {
+        message = await Message.findById(messageId);
+      } catch (e) {}
 
-      if (existingIdx >= 0) {
-        message.reactions.splice(existingIdx, 1);
-      } else {
-        // Remove any previous reaction from this user first
-        message.reactions = message.reactions.filter(
-          (r) => String(r.userId) !== String(userId)
-        );
-        message.reactions.push(reaction);
+      let targetConversation = null;
+      let targetGroup = null;
+
+      if (!message) {
+        // Look inside Conversation subdocuments
+        targetConversation = await Conversation.findOne({ 'messages._id': messageId });
+        if (!targetConversation) {
+          targetGroup = await Group.findOne({ 'messages._id': messageId });
+        }
       }
 
-      await message.save();
+      let updatedReactions = [];
 
-      // Sync nested documents
-      const reactionsData = message.reactions.map((r) => ({
-        emoji: r.emoji,
-        userId: r.userId,
-        userName: r.userName,
-      }));
+      if (message) {
+        if (!message.reactions) message.reactions = [];
+        const existingIdx = message.reactions.findIndex(
+          (r) => String(r.userId) === String(userId) && r.emoji === emoji
+        );
 
-      if (message.groupId) {
-        await Group.updateOne(
-          { 'messages._id': messageId },
-          { $set: { 'messages.$.reactions': reactionsData } }
-        );
-      } else if (message.receiverId) {
-        await Conversation.updateOne(
-          { 'messages._id': messageId },
-          { $set: { 'messages.$.reactions': reactionsData } }
-        );
+        if (existingIdx >= 0) {
+          // Remove if same emoji
+          message.reactions.splice(existingIdx, 1);
+        } else {
+          // Replace previous emoji by this user or add new
+          message.reactions = message.reactions.filter(
+            (r) => String(r.userId) !== String(userId)
+          );
+          message.reactions.push(reaction);
+        }
+
+        await message.save();
+
+        updatedReactions = message.reactions.map((r) => ({
+          emoji: r.emoji,
+          userId: String(r.userId),
+          userName: r.userName || '',
+        }));
+
+        // Keep nested documents synced
+        if (message.groupId) {
+          await Group.updateOne(
+            { 'messages._id': message._id },
+            { $set: { 'messages.$.reactions': updatedReactions } }
+          ).catch(() => {});
+        } else {
+          await Conversation.updateOne(
+            { 'messages._id': message._id },
+            { $set: { 'messages.$.reactions': updatedReactions } }
+          ).catch(() => {});
+        }
+      } else if (targetConversation) {
+        const subMsg = targetConversation.messages.id(messageId);
+        if (subMsg) {
+          if (!subMsg.reactions) subMsg.reactions = [];
+          const existingIdx = subMsg.reactions.findIndex(
+            (r) => String(r.userId) === String(userId) && r.emoji === emoji
+          );
+
+          if (existingIdx >= 0) {
+            subMsg.reactions.splice(existingIdx, 1);
+          } else {
+            subMsg.reactions = subMsg.reactions.filter(
+              (r) => String(r.userId) !== String(userId)
+            );
+            subMsg.reactions.push(reaction);
+          }
+
+          await targetConversation.save();
+
+          updatedReactions = subMsg.reactions.map((r) => ({
+            emoji: r.emoji,
+            userId: String(r.userId),
+            userName: r.userName || '',
+          }));
+        }
+      } else if (targetGroup) {
+        const subMsg = targetGroup.messages.id(messageId);
+        if (subMsg) {
+          if (!subMsg.reactions) subMsg.reactions = [];
+          const existingIdx = subMsg.reactions.findIndex(
+            (r) => String(r.userId) === String(userId) && r.emoji === emoji
+          );
+
+          if (existingIdx >= 0) {
+            subMsg.reactions.splice(existingIdx, 1);
+          } else {
+            subMsg.reactions = subMsg.reactions.filter(
+              (r) => String(r.userId) !== String(userId)
+            );
+            subMsg.reactions.push(reaction);
+          }
+
+          await targetGroup.save();
+
+          updatedReactions = subMsg.reactions.map((r) => ({
+            emoji: r.emoji,
+            userId: String(r.userId),
+            userName: r.userName || '',
+          }));
+        }
       }
 
       const emitPayload = {
         messageId: String(messageId),
-        reactions: reactionsData,
+        reactions: updatedReactions,
       };
 
-      // Broadcast to relevant parties
-      const effectiveGroupId = groupId || message.groupId;
+      // Broadcast to relevant group or direct users
+      const effectiveGroupId = groupId || message?.groupId || targetGroup?._id;
       if (effectiveGroupId) {
         io.to(`group:${effectiveGroupId}`).emit('message:reaction', emitPayload);
       } else {
-        const targetId =
-          String(message.receiverId) === String(userId)
-            ? String(message.senderId)
-            : String(message.receiverId);
-        io.to(`user:${targetId}`).emit('message:reaction', emitPayload);
+        const otherPartyId =
+          receiverId ||
+          (message?.receiverId
+            ? String(message.receiverId) === String(userId)
+              ? String(message.senderId)
+              : String(message.receiverId)
+            : null) ||
+          (targetConversation?.participants
+            ? String(targetConversation.participants.find((p) => String(p) !== String(userId)))
+            : null);
+
+        if (otherPartyId) {
+          io.to(`user:${otherPartyId}`).emit('message:reaction', emitPayload);
+        }
         io.to(`user:${userId}`).emit('message:reaction', emitPayload);
       }
 
-      if (callback) callback({ success: true, reactions: reactionsData });
+      if (callback) callback({ success: true, reactions: updatedReactions });
     } catch (err) {
       console.error('[ChatHandler] Error handling reaction:', err);
       if (callback) callback({ error: 'Failed to add reaction' });

@@ -117,14 +117,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const senderEmail = (message.sender?.email || (message as any).senderId?.email || '').toLowerCase();
   const isSenderAdmin = SUPER_ADMINS.includes(senderEmail) || (message.sender as any)?.role === 'admin';
 
+  const actualMessageId = String(message.id || (message as any)._id || '');
+
   // Group reactions by emoji for display
+  const currentUserIdStr = String(currentUserId || '');
   const groupedReactions = (message.reactions || []).reduce<Record<string, { count: number; users: string[]; hasMyReaction: boolean }>>((acc, r) => {
     if (!acc[r.emoji]) {
       acc[r.emoji] = { count: 0, users: [], hasMyReaction: false };
     }
     acc[r.emoji].count += 1;
     if (r.userName) acc[r.emoji].users.push(r.userName);
-    if (currentUserId && String(r.userId) === String(currentUserId)) {
+    const rUserIdStr = typeof r.userId === 'object' && r.userId !== null
+      ? String((r.userId as any)._id || (r.userId as any).id || '')
+      : String(r.userId || '');
+    if (currentUserIdStr && rUserIdStr === currentUserIdStr) {
       acc[r.emoji].hasMyReaction = true;
     }
     return acc;
@@ -181,7 +187,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {(isSelf || canDelete) && onDeleteMessage && (
             <button
-              onClick={() => onDeleteMessage(message.id)}
+              onClick={() => onDeleteMessage(actualMessageId)}
               className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-neutral-500 hover:text-red-400 rounded"
               title="Delete log"
             >
@@ -213,13 +219,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const canDeleteThisMessage = isGroup ? (isSelf || isGroupCreator) : isSelf;
 
   const handleReact = (emoji: string) => {
-    onReactMessage?.(message.id, emoji);
+    onReactMessage?.(actualMessageId, emoji);
     setShowReactionPicker(false);
   };
 
   return (
     <div
-      id={`message-${message.id}`}
+      id={`message-${actualMessageId}`}
       className={`flex w-full ${isSelf ? 'justify-end' : 'justify-start'} my-1 group transition-all duration-300 rounded-2xl ${
         isHighlighted ? 'bg-emerald-500/20 ring-2 ring-emerald-400/80 p-1.5' : ''
       }`}
@@ -227,29 +233,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       <div className="flex items-center gap-1.5 max-w-[85%] sm:max-w-[70%]">
         {/* Actions for self (React + Reply + Delete) */}
         {isSelf && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
+          <div className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
             {/* Reaction button */}
             {onReactMessage && (
               <div className="relative">
                 <button
                   onClick={() => setShowReactionPicker((p) => !p)}
-                  className="p-1.5 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-neutral-800/80 transition-colors"
-                  title="React"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/80 transition-colors"
+                  title="React with Emoji"
                 >
                   <SmilePlus className="w-3.5 h-3.5" />
                 </button>
                 {showReactionPicker && (
-                  <div className="absolute bottom-full right-0 mb-1 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-neutral-800 border border-neutral-700 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
-                    {QUICK_REACTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => handleReact(emoji)}
-                        className="text-base hover:scale-125 active:scale-95 transition-transform p-0.5 hover:bg-neutral-700/50 rounded"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowReactionPicker(false)}
+                    />
+                    <div className="absolute bottom-full right-0 mb-1 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-neutral-800 border border-neutral-700 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                      {QUICK_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReact(emoji)}
+                          className="text-base hover:scale-125 active:scale-95 transition-transform p-0.5 hover:bg-neutral-700/50 rounded"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -365,21 +377,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* REACTIONS DISPLAY — Below the bubble */}
           {hasReactions && (
-            <div className={`flex flex-wrap gap-1 mt-0.5 ${isSelf ? 'justify-end' : 'justify-start'}`}>
+            <div className={`flex flex-wrap gap-1 mt-1 ${isSelf ? 'justify-end' : 'justify-start'}`}>
               {Object.entries(groupedReactions).map(([emoji, data]) => (
                 <button
                   key={emoji}
-                  onClick={() => onReactMessage?.(message.id, emoji)}
-                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-xs transition-all hover:scale-105 active:scale-95 ${
+                  onClick={() => onReactMessage?.(actualMessageId, emoji)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm ${
                     data.hasMyReaction
-                      ? 'bg-emerald-950/60 border-emerald-700/60 shadow-sm shadow-emerald-900/20'
-                      : 'bg-neutral-800/80 border-neutral-700/60 hover:bg-neutral-700/80'
+                      ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300 ring-1 ring-emerald-500/30'
+                      : 'bg-neutral-800/90 border-neutral-700/80 text-neutral-300 hover:bg-neutral-700/80'
                   }`}
-                  title={data.users.join(', ')}
+                  title={data.users.length ? data.users.join(', ') : emoji}
                 >
                   <span className="text-sm leading-none">{emoji}</span>
                   {data.count > 1 && (
-                    <span className="text-[10px] text-neutral-400 font-medium">{data.count}</span>
+                    <span className="text-[11px] font-semibold">{data.count}</span>
                   )}
                 </button>
               ))}
@@ -389,36 +401,42 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* Actions for non-self (React + Reply, and Delete if group creator) */}
         {!isSelf && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
+          <div className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-0.5 self-center flex-shrink-0">
             {/* Reaction button */}
             {onReactMessage && (
               <div className="relative">
                 <button
                   onClick={() => setShowReactionPicker((p) => !p)}
-                  className="p-1.5 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-neutral-800/80 transition-colors"
-                  title="React"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/80 transition-colors"
+                  title="React with Emoji"
                 >
                   <SmilePlus className="w-3.5 h-3.5" />
                 </button>
                 {showReactionPicker && (
-                  <div className="absolute bottom-full left-0 mb-1 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-neutral-800 border border-neutral-700 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
-                    {QUICK_REACTIONS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        onClick={() => handleReact(emoji)}
-                        className="text-base hover:scale-125 active:scale-95 transition-transform p-0.5 hover:bg-neutral-700/50 rounded"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowReactionPicker(false)}
+                    />
+                    <div className="absolute bottom-full left-0 mb-1 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-neutral-800 border border-neutral-700 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                      {QUICK_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReact(emoji)}
+                          className="text-base hover:scale-125 active:scale-95 transition-transform p-0.5 hover:bg-neutral-700/50 rounded"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
             {onReplyMessage && (
               <button
                 onClick={() => onReplyMessage(message)}
-                className="p-1.5 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800/80 transition-colors"
                 title="Reply to Message"
               >
                 <Reply className="w-3.5 h-3.5" />
@@ -426,8 +444,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
             {canDeleteThisMessage && onDeleteMessage && (
               <button
-                onClick={() => onDeleteMessage(message.id)}
-                className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
+                onClick={() => onDeleteMessage(actualMessageId)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
                 title="Delete Message (Group Creator)"
               >
                 <Trash2 className="w-3.5 h-3.5" />

@@ -6,36 +6,31 @@ const { decryptServerMessage } = require('../utils/encryption');
 
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 
-// Get all confirmed friends for current user (Super Admin gets all users directly)
+// Get all confirmed friends for current user
 const getFriends = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
 
-    let friends;
-    if (isSuperAdmin) {
-      // Super Admin can directly chat with any registered user
-      friends = await User.find({ _id: { $ne: currentUserId } }, 'name email avatar isOnline lastSeen');
-    } else {
-      const currentUser = await User.findById(currentUserId).populate(
-        'friends',
-        'name email avatar isOnline lastSeen blockedUsers'
-      );
+    // Fetch current user with populated friends and blockedUsers
+    const currentUser = await User.findById(currentUserId).populate(
+      'friends',
+      'name email avatar isOnline lastSeen blockedUsers'
+    );
 
-      if (!currentUser) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      const myBlockedIds = (currentUser.blockedUsers || []).map(String);
-      const rawFriends = currentUser.friends || [];
-      // Completely hide if user is blocked by me OR if that user has blocked me
-      friends = rawFriends.filter((f) => {
-        const fId = String(f._id);
-        const hasBlockedMe = (f.blockedUsers || []).map(String).includes(String(currentUserId));
-        const isBlockedByMe = myBlockedIds.includes(fId);
-        return !isBlockedByMe && !hasBlockedMe;
-      });
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
     }
+
+    const myBlockedIds = (currentUser.blockedUsers || []).map((id) => String(id));
+    const rawFriends = currentUser.friends || [];
+
+    // Filter out: blocked by me OR user who has blocked me
+    const friends = rawFriends.filter((f) => {
+      const fId = String(f._id || f.id);
+      const isBlockedByMe = myBlockedIds.includes(fId);
+      const hasBlockedMe = (f.blockedUsers || []).map((id) => String(id)).includes(String(currentUserId));
+      return !isBlockedByMe && !hasBlockedMe;
+    });
 
     // Enrich with live presence and conversation preview
     const enrichedFriends = await Promise.all(
@@ -349,6 +344,7 @@ const unfriendUser = async (req, res, next) => {
 // Block a user
 const blockUser = async (req, res, next) => {
   try {
+    const mongoose = require('mongoose');
     const currentUserId = req.user._id;
     const targetUserId = req.params.userId;
 
@@ -356,28 +352,44 @@ const blockUser = async (req, res, next) => {
       return res.status(400).json({ message: 'Cannot block yourself' });
     }
 
-    // Add to blockedUsers, remove from friends, and clear friend requests in both directions
-    await User.findByIdAndUpdate(currentUserId, {
-      $addToSet: { blockedUsers: targetUserId },
-      $pull: {
-        friends: targetUserId,
-        friendRequests: { from: targetUserId },
-        sentRequests: { to: targetUserId },
-      },
-    });
+    const targetObjId = mongoose.Types.ObjectId.isValid(targetUserId)
+      ? new mongoose.Types.ObjectId(targetUserId)
+      : targetUserId;
+    const currentObjId = mongoose.Types.ObjectId.isValid(currentUserId)
+      ? new mongoose.Types.ObjectId(currentUserId)
+      : currentUserId;
 
-    await User.findByIdAndUpdate(targetUserId, {
-      $pull: {
-        friends: currentUserId,
-        friendRequests: { from: currentUserId },
-        sentRequests: { to: currentUserId },
-      },
-    });
+    // 1. Add to blockedUsers, remove from friends, and clear friend requests for blocker
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $addToSet: { blockedUsers: targetObjId },
+        $pull: {
+          friends: { $in: [targetObjId, String(targetUserId)] },
+          friendRequests: { from: { $in: [targetObjId, String(targetUserId)] } },
+          sentRequests: { to: { $in: [targetObjId, String(targetUserId)] } },
+        },
+      }
+    );
 
-    // Wipe conversation and messages between them ("block kora hole sob conversation gayeb hoye jabe")
-    await Conversation.findOneAndDelete({
+    // 2. Remove blocker from target's friends, friendRequests, sentRequests
+    await User.updateOne(
+      { _id: targetUserId },
+      {
+        $pull: {
+          friends: { $in: [currentObjId, String(currentUserId)] },
+          friendRequests: { from: { $in: [currentObjId, String(currentUserId)] } },
+          sentRequests: { to: { $in: [currentObjId, String(currentUserId)] } },
+        },
+      }
+    );
+
+    // 3. Wipe all conversations between them
+    await Conversation.deleteMany({
       participants: { $all: [currentUserId, targetUserId] },
     });
+
+    // 4. Wipe all messages between them
     await Message.deleteMany({
       $or: [
         { senderId: currentUserId, receiverId: targetUserId },
@@ -385,21 +397,43 @@ const blockUser = async (req, res, next) => {
       ],
     });
 
+    // 5. Broadcast realtime socket events
     try {
       const { getIO } = require('../sockets/socketManager');
-      // Tell the blocked user that they were blocked by someone
-      getIO().to(`user:${targetUserId}`).emit('friend:blocked', {
+      const io = getIO();
+
+      // Emit to target user (they got blocked)
+      io.to(`user:${targetUserId}`).emit('friend:blocked', {
         userId: String(currentUserId),
+        blockerId: String(currentUserId),
+        blockedUserId: String(targetUserId),
         blockedBy: 'other',
       });
-      // Tell the blocker that they initiated the block
-      getIO().to(`user:${currentUserId}`).emit('friend:blocked', {
+      io.to(`user:${targetUserId}`).emit('friend:unfriended', {
+        userId: String(currentUserId),
+      });
+      io.to(`user:${targetUserId}`).emit('conversation:cleared', {
+        userId: String(currentUserId),
+      });
+
+      // Emit to blocker (they performed the block)
+      io.to(`user:${currentUserId}`).emit('friend:blocked', {
         userId: String(targetUserId),
+        blockerId: String(currentUserId),
+        blockedUserId: String(targetUserId),
         blockedBy: 'self',
       });
-    } catch (e) {}
+      io.to(`user:${currentUserId}`).emit('friend:unfriended', {
+        userId: String(targetUserId),
+      });
+      io.to(`user:${currentUserId}`).emit('conversation:cleared', {
+        userId: String(targetUserId),
+      });
+    } catch (e) {
+      console.error('[blockUser] Socket emit error:', e);
+    }
 
-    return res.status(200).json({ success: true, message: 'User blocked' });
+    return res.status(200).json({ success: true, message: 'User blocked and unfriended successfully' });
   } catch (error) {
     next(error);
   }
@@ -408,26 +442,37 @@ const blockUser = async (req, res, next) => {
 // Unblock a user
 const unblockUser = async (req, res, next) => {
   try {
+    const mongoose = require('mongoose');
     const currentUserId = req.user._id;
     const targetUserId = req.params.userId;
 
-    await User.findByIdAndUpdate(currentUserId, {
-      $pull: { blockedUsers: targetUserId },
-    });
+    const targetObjId = mongoose.Types.ObjectId.isValid(targetUserId)
+      ? new mongoose.Types.ObjectId(targetUserId)
+      : targetUserId;
+
+    await User.updateOne(
+      { _id: currentUserId },
+      {
+        $pull: {
+          blockedUsers: { $in: [targetObjId, String(targetUserId)] },
+        },
+      }
+    );
 
     try {
       const { getIO } = require('../sockets/socketManager');
-      getIO().to(`user:${targetUserId}`).emit('friend:unblocked', {
+      const io = getIO();
+      io.to(`user:${targetUserId}`).emit('friend:unblocked', {
         userId: String(currentUserId),
         unblockedBy: 'other',
       });
-      getIO().to(`user:${currentUserId}`).emit('friend:unblocked', {
+      io.to(`user:${currentUserId}`).emit('friend:unblocked', {
         userId: String(targetUserId),
         unblockedBy: 'self',
       });
     } catch (e) {}
 
-    return res.status(200).json({ success: true, message: 'User unblocked' });
+    return res.status(200).json({ success: true, message: 'User unblocked successfully' });
   } catch (error) {
     next(error);
   }

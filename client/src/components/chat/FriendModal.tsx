@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Search, UserCheck, UserPlus, Check, Clock, UserX } from 'lucide-react';
+import { X, Search, UserCheck, UserPlus, Check, Clock, UserX, ShieldOff } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Avatar } from '../ui/Avatar';
 import { User } from '@/types';
@@ -35,12 +35,14 @@ export const FriendModal: React.FC<FriendModalProps> = ({
   onFriendAdded,
   onRequestHandled,
 }) => {
-  const [activeTab, setActiveTab] = useState<'requests' | 'search'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'search' | 'blocked'>('requests');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchUserResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<FriendRequestItem[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
+  const [isLoadingBlocked, setIsLoadingBlocked] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -54,6 +56,19 @@ export const FriendModal: React.FC<FriendModalProps> = ({
       console.error('Failed to fetch requests:', err);
     } finally {
       setIsLoadingRequests(false);
+    }
+  };
+
+  // Fetch blocked users
+  const fetchBlockedUsers = async () => {
+    try {
+      setIsLoadingBlocked(true);
+      const data = await apiRequest('/friends/blocked');
+      setBlockedUsers(data.blockedUsers || []);
+    } catch (err) {
+      console.error('Failed to fetch blocked users:', err);
+    } finally {
+      setIsLoadingBlocked(false);
     }
   };
 
@@ -78,6 +93,8 @@ export const FriendModal: React.FC<FriendModalProps> = ({
       fetchPendingRequests();
       if (activeTab === 'search') {
         fetchUsers(searchQuery);
+      } else if (activeTab === 'blocked') {
+        fetchBlockedUsers();
       }
     }
   }, [isOpen, activeTab]);
@@ -109,7 +126,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
     }
   };
 
-  // Unblock user
+  // Unblock user from search list
   const handleUnblock = async (userId: string) => {
     try {
       setActionLoadingId(userId);
@@ -117,13 +134,32 @@ export const FriendModal: React.FC<FriendModalProps> = ({
       setSearchResults((prev) =>
         prev.map((u) =>
           u.id === userId
-            ? { ...u, isBlockedByMe: false, isBlocked: false }
+            ? { ...u, isBlockedByMe: false, isBlocked: false, isFriend: false }
             : u
         )
       );
-      setFeedback('User unblocked!');
+      setBlockedUsers((prev) => prev.filter((u) => (u.id || (u as any)._id) !== userId));
+      setFeedback('User unblocked! You can send a friend request to connect again.');
       setTimeout(() => setFeedback(null), 3000);
       onFriendAdded?.();
+      onRequestHandled?.();
+    } catch (err: any) {
+      setFeedback(err.message || 'Failed to unblock user');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Unblock user from dedicated Blocked tab
+  const handleUnblockFromBlockedTab = async (userId: string) => {
+    try {
+      setActionLoadingId(userId);
+      await apiRequest(`/friends/unblock/${userId}`, { method: 'POST' });
+      setBlockedUsers((prev) => prev.filter((u) => (u.id || (u as any)._id) !== userId));
+      setFeedback('User unblocked! They are now discoverable in Find Friends.');
+      setTimeout(() => setFeedback(null), 3000);
+      onFriendAdded?.();
+      onRequestHandled?.();
     } catch (err: any) {
       setFeedback(err.message || 'Failed to unblock user');
     } finally {
@@ -165,13 +201,13 @@ export const FriendModal: React.FC<FriendModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-white">Friends & Contacts</h3>
-            <p className="text-xs text-neutral-400">Connect with people on Shofi Chat</p>
+            <p className="text-xs text-neutral-400">Manage friends, requests, and blocked users</p>
           </div>
           <button
             onClick={onClose}
@@ -207,6 +243,24 @@ export const FriendModal: React.FC<FriendModalProps> = ({
             }`}
           >
             Find New Friends
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('blocked');
+              fetchBlockedUsers();
+            }}
+            className={`pb-2.5 text-xs font-semibold relative transition-colors ${
+              activeTab === 'blocked'
+                ? 'text-rose-400 border-b-2 border-rose-500'
+                : 'text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            Blocked Users
+            {blockedUsers.length > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.2 bg-rose-500/20 text-rose-300 rounded-full text-[10px]">
+                {blockedUsers.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -274,6 +328,52 @@ export const FriendModal: React.FC<FriendModalProps> = ({
                   </div>
                 </div>
               ))
+            )
+          ) : activeTab === 'blocked' ? (
+            /* BLOCKED USERS TAB */
+            isLoadingBlocked ? (
+              <div className="text-center py-8 text-neutral-500 text-xs">
+                Loading blocked users...
+              </div>
+            ) : blockedUsers.length === 0 ? (
+              <div className="text-center py-10 px-4 text-neutral-400">
+                <div className="w-12 h-12 rounded-2xl bg-neutral-800/80 flex items-center justify-center mx-auto mb-3 text-neutral-500">
+                  <ShieldOff className="w-6 h-6 stroke-[1.5]" />
+                </div>
+                <p className="text-sm font-medium text-neutral-200">No blocked users</p>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Users you block will appear here. They cannot message or call you.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {blockedUsers.map((user) => {
+                  const uid = String(user.id || (user as any)._id);
+                  return (
+                    <div
+                      key={uid}
+                      className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/40 border border-neutral-800/70"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Avatar name={user.name} avatar={user.avatar} size="md" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                          <p className="text-xs text-neutral-400 truncate">{user.email}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleUnblockFromBlockedTab(uid)}
+                        disabled={actionLoadingId === uid}
+                        className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white text-xs font-semibold transition-colors flex items-center gap-1.5 border border-neutral-700/60 shadow-sm"
+                      >
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Unblock</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             )
           ) : (
             /* SEARCH TAB */

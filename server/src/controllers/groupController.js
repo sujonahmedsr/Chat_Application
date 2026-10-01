@@ -126,7 +126,9 @@ const getGroupMessages = async (req, res, next) => {
           const json = m.toJSON ? m.toJSON() : m;
           return {
             ...json,
+            id: String(json._id || json.id),
             content: decryptServerMessage(json.content),
+            reactions: json.reactions || [],
             sender: m.senderId,
           };
         }),
@@ -143,7 +145,9 @@ const getGroupMessages = async (req, res, next) => {
         const json = m.toJSON();
         return {
           ...json,
+          id: String(json._id || json.id),
           content: decryptServerMessage(json.content),
+          reactions: json.reactions || [],
           sender: m.senderId,
         };
       }),

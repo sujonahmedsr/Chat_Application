@@ -39,7 +39,7 @@ const extractId = (val: any): string => {
 };
 
 export default function ChatDashboard() {
-  const { user: currentUser, loading: authLoading, logout, updateProfile } = useAuth();
+  const { user: currentUser, loading: authLoading, logout, updateProfile, refreshUser } = useAuth();
   const { socket, onlineUserIds } = useSocket();
   const router = useRouter();
 
@@ -545,18 +545,47 @@ export default function ChatDashboard() {
     }
   };
 
-  // React to a message with an emoji
+  // React to a message with an emoji (Optimistic Instant UI Update + Socket Broadcast)
   const handleReactMessage = useCallback(
     (messageId: string, emoji: string) => {
-      if (!socket) return;
-      socket.emit('message:react', {
-        messageId,
-        emoji,
-        receiverId: selectedUser?.id,
-        groupId: selectedGroup?.id,
-      });
+      const msgId = extractId(messageId);
+      if (!msgId) return;
+
+      const myUserId = extractId(currentUserRef.current?.id || (currentUserRef.current as any)?._id);
+      const myUserName = currentUserRef.current?.name || '';
+
+      // 1. Instant optimistic update in local state (0ms delay)
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (extractId(m.id || (m as any)._id) !== msgId) return m;
+          const currentReactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
+          const existingIdx = currentReactions.findIndex(
+            (r) => String(r.userId) === myUserId && r.emoji === emoji
+          );
+          let newReactions;
+          if (existingIdx >= 0) {
+            newReactions = currentReactions.filter((_, idx) => idx !== existingIdx);
+          } else {
+            newReactions = [
+              ...currentReactions.filter((r) => String(r.userId) !== myUserId),
+              { emoji, userId: myUserId, userName: myUserName },
+            ];
+          }
+          return { ...m, reactions: newReactions };
+        })
+      );
+
+      // 2. Broadcast via socket to sync partner & persist to database
+      if (socket) {
+        socket.emit('message:react', {
+          messageId: msgId,
+          emoji,
+          receiverId: extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id),
+          groupId: extractId(selectedGroupRef.current?.id || (selectedGroupRef.current as any)?._id),
+        });
+      }
     },
-    [socket, selectedUser?.id, selectedGroup?.id]
+    [socket]
   );
 
   // Socket event listeners (Ref-based for zero stale closures & instantaneous multi-device sync)
@@ -795,18 +824,7 @@ export default function ChatDashboard() {
     };
 
     const handleUnfriended = ({ userId }: { userId: string }) => {
-      fetchFriends();
       const targetUid = extractId(userId);
-      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
-      if (currentSelectedId === targetUid) {
-        setSelectedUser(null);
-        setMessages([]);
-      }
-    };
-
-    const handleBlocked = ({ userId }: { userId: string }) => {
-      const targetUid = extractId(userId);
-      // Instantly remove from local friends list (no network call)
       setUsers((prev) => prev.filter((u) => extractId(u.id || (u as any)._id) !== targetUid));
       const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
       if (currentSelectedId === targetUid) {
@@ -816,8 +834,21 @@ export default function ChatDashboard() {
       }
     };
 
+    const handleBlocked = ({ userId }: { userId: string }) => {
+      const targetUid = extractId(userId);
+      // Instantly remove from local friends list (instant update, zero reload)
+      setUsers((prev) => prev.filter((u) => extractId(u.id || (u as any)._id) !== targetUid));
+      const currentSelectedId = extractId(selectedUserRef.current?.id || (selectedUserRef.current as any)?._id);
+      if (currentSelectedId === targetUid) {
+        setSelectedUser(null);
+        setMessages([]);
+        setIsMobileChatOpen(false);
+      }
+      refreshUser();
+    };
+
     const handleUnblocked = ({ userId }: { userId: string }) => {
-      // Unblock doesn't auto-add to friends, but refresh list to update block status
+      refreshUser();
       fetchFriends();
     };
 
