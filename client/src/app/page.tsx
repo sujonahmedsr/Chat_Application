@@ -23,6 +23,7 @@ import { FriendModal } from '@/components/chat/FriendModal';
 import { AdminModal } from '@/components/admin/AdminModal';
 import { SettingsModal } from '@/components/chat/SettingsModal';
 import { NotificationModal } from '@/components/chat/NotificationModal';
+import { LandingPage } from '@/components/landing/LandingPage';
 import {
   encryptMessage,
   decryptMessage,
@@ -203,12 +204,7 @@ export default function ChatDashboard() {
     toggleMute: toggleGroupMute,
   } = useGroupCall(currentUser?.id);
 
-  // Redirect to login if unauthenticated
-  useEffect(() => {
-    if (!authLoading && !currentUser) {
-      router.push('/login');
-    }
-  }, [authLoading, currentUser, router]);
+
 
   // Fetch confirmed friends list
   const fetchFriends = useCallback(async () => {
@@ -1053,13 +1049,17 @@ export default function ChatDashboard() {
     };
   }, [socket, fetchFriends, fetchGroups, fetchPendingRequestsCount, logout]);
 
-  if (authLoading || !currentUser) {
+  if (authLoading) {
     return (
       <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
         <span className="text-sm font-medium">Initializing Shofi Chat...</span>
       </div>
     );
+  }
+
+  if (!currentUser) {
+    return <LandingPage />;
   }
 
   return (

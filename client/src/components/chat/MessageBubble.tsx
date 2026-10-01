@@ -11,6 +11,7 @@ import {
   Trash2,
   Reply,
   SmilePlus,
+  ExternalLink,
 } from 'lucide-react';
 import { Message } from '@/types';
 
@@ -200,8 +201,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   }
 
   const renderHighlightedContent = (text: string) => {
-    const parts = text.split(/(@[a-zA-Z0-9._]+)/g);
+    // Regex matching full URLs, www. domains, popular platforms (YouTube, Facebook, TikTok, etc.), and @mentions
+    const LINK_OR_MENTION_REGEX =
+      /(https?:\/\/[^\s]+|www\.[^\s]+|(?:(?:youtube\.com|youtu\.be|facebook\.com|fb\.watch|fb\.me|tiktok\.com|instagram\.com|twitter\.com|x\.com|github\.com)[^\s]*)|@[a-zA-Z0-9._]+)/gi;
+
+    const parts = text.split(LINK_OR_MENTION_REGEX);
+
     return parts.map((part, index) => {
+      if (!part) return null;
+
+      // Handle @mentions
       if (part.startsWith('@') && part.length > 1) {
         return (
           <span
@@ -212,6 +221,45 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </span>
         );
       }
+
+      // Check if this part is a link
+      const isHttpUrl = /^https?:\/\//i.test(part);
+      const isWwwUrl = /^www\./i.test(part);
+      const isSocialDomain = /^(youtube\.com|youtu\.be|facebook\.com|fb\.watch|fb\.me|tiktok\.com|instagram\.com|twitter\.com|x\.com|github\.com)/i.test(part);
+
+      if (isHttpUrl || isWwwUrl || isSocialDomain) {
+        // Strip trailing punctuation like dot, comma, parenthesis from the link
+        let cleanUrl = part;
+        let trailingPunct = '';
+        const matchPunct = cleanUrl.match(/[.,!?;:)]+$/);
+        if (matchPunct) {
+          trailingPunct = matchPunct[0];
+          cleanUrl = cleanUrl.slice(0, -trailingPunct.length);
+        }
+
+        const href = isHttpUrl ? cleanUrl : `https://${cleanUrl}`;
+
+        return (
+          <React.Fragment key={index}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={`inline-flex items-center gap-1 underline underline-offset-2 break-all font-medium transition-colors ${
+                isSelf
+                  ? 'text-sky-200 hover:text-white'
+                  : 'text-sky-400 hover:text-sky-300'
+              }`}
+            >
+              <span>{cleanUrl}</span>
+              <ExternalLink className="w-3 h-3 inline-block flex-shrink-0 opacity-80" />
+            </a>
+            {trailingPunct}
+          </React.Fragment>
+        );
+      }
+
       return part;
     });
   };
