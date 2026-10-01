@@ -22,19 +22,25 @@ export interface IncomingGroupCallData {
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
+    // Top-tier Google STUN servers (Fast, worldwide, reliable)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    // Cloudflare STUN
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    // Twilio STUN
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    // ExpressTURN Relay servers (Handles Symmetric NAT / 4G / 5G / CGNAT mobile carriers)
     {
       urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turn:relay1.expressturn.com:3478',
+        'turn:relay1.expressturn.com:3478?transport=udp',
+        'turn:relay1.expressturn.com:3478?transport=tcp',
       ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
+      username: 'efPGGD7Y4BSTGSXFHJ',
+      credential: 'Bj8bZ0sXfnqJRlUb',
     },
   ],
   iceCandidatePoolSize: 10,
@@ -104,18 +110,25 @@ export const useGroupCall = (currentUserId?: string) => {
     if (!audio) {
       audio = document.createElement('audio');
       audio.autoplay = true;
+      audio.volume = 1.0;
+      audio.muted = false;
       (audio as any).playsInline = true;
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
       audio.style.position = 'fixed';
-      audio.style.opacity = '0';
+      audio.style.opacity = '0.001';
       audio.style.pointerEvents = 'none';
       audio.style.width = '1px';
       audio.style.height = '1px';
       audio.style.bottom = '0';
       audio.style.right = '0';
+      audio.style.zIndex = '-999';
       audioElementsRef.current.set(peerId, audio);
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
+    audio.volume = 1.0;
+    audio.muted = false;
     audio.play().catch((err) => {
       console.warn('[useGroupCall] audio play error:', err);
     });

@@ -34,6 +34,10 @@ interface ActiveCallModalProps {
   remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
+  localStream?: MediaStream | null;
+  remoteStream?: MediaStream | null;
+  isAudioBlocked?: boolean;
+  onResumeAudio?: () => void;
 }
 
 export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
@@ -53,6 +57,10 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   remoteAudioRef,
   localVideoRef,
   remoteVideoRef,
+  localStream,
+  remoteStream,
+  isAudioBlocked = false,
+  onResumeAudio,
 }) => {
   const isVideo = callType === 'video';
 
@@ -66,6 +74,34 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Synchronize remote video element whenever stream, fullscreen state, or status changes
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream && isVideo) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      remoteVideoRef.current.muted = true;
+      (remoteVideoRef.current as any).playsInline = true;
+      remoteVideoRef.current.setAttribute('playsinline', '');
+      remoteVideoRef.current.setAttribute('webkit-playsinline', '');
+      remoteVideoRef.current.play().catch(() => {});
+    }
+  }, [remoteStream, isFullscreen, isVideo, callStatus, remoteVideoRef]);
+
+  // Synchronize local video element
+  useEffect(() => {
+    if (localVideoRef.current && localStream && isVideo) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      localVideoRef.current.muted = true;
+      (localVideoRef.current as any).playsInline = true;
+      localVideoRef.current.setAttribute('playsinline', '');
+      localVideoRef.current.setAttribute('webkit-playsinline', '');
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, isFullscreen, isCameraOff, isVideo, callStatus, localVideoRef]);
 
   // Initialize fullscreen on video call start
   useEffect(() => {
@@ -153,6 +189,17 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 
   return (
     <>
+      {/* Audio Autoplay Unblock Banner for Mobile Browsers */}
+      {isAudioBlocked && (
+        <div
+          onClick={onResumeAudio}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[120] px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs sm:text-sm rounded-full shadow-2xl cursor-pointer flex items-center gap-2 animate-bounce transition-all backdrop-blur-md border border-amber-300"
+        >
+          <Volume2 className="w-4 h-4 animate-pulse text-neutral-950" />
+          <span>Sound paused by phone browser — Tap here to hear audio</span>
+        </div>
+      )}
+
       {/* Remote Audio Track (always present for sound) */}
       <audio
         ref={remoteAudioRef as any}
@@ -178,9 +225,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
           {/* Main Remote Video Background */}
           <div className="relative flex-1 w-full h-full bg-black flex items-center justify-center overflow-hidden">
             <video
-              ref={remoteVideoRef as any}
+              ref={(el) => {
+                (remoteVideoRef as any).current = el;
+                if (el && remoteStream && el.srcObject !== remoteStream) {
+                  el.srcObject = remoteStream;
+                  el.play().catch(() => {});
+                }
+              }}
               autoPlay
               playsInline
+              muted
               className="w-full h-full object-cover sm:object-contain"
             />
 
@@ -447,9 +501,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
                   /* FLOATING VIDEO VIEWPORT */
                   <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
                     <video
-                      ref={remoteVideoRef as any}
+                      ref={(el) => {
+                        (remoteVideoRef as any).current = el;
+                        if (el && remoteStream && el.srcObject !== remoteStream) {
+                          el.srcObject = remoteStream;
+                          el.play().catch(() => {});
+                        }
+                      }}
                       autoPlay
                       playsInline
+                      muted
                       className="w-full h-full object-cover"
                     />
 

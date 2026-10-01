@@ -174,9 +174,13 @@ export default function ChatDashboard() {
     isCameraOff,
     isMirrored,
     facingMode,
+    localStream,
+    remoteStream,
     remoteAudioRef,
     localVideoRef,
     remoteVideoRef,
+    isAudioBlocked,
+    resumeAudio,
     startCall,
     answerCall,
     rejectCall,
@@ -1234,6 +1238,10 @@ export default function ChatDashboard() {
         remoteAudioRef={remoteAudioRef}
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
+        localStream={localStream}
+        remoteStream={remoteStream}
+        isAudioBlocked={isAudioBlocked}
+        onResumeAudio={resumeAudio}
       />
 
       {/* Multi-Party Group Audio Conference: Incoming Call Ringing Modal */}
