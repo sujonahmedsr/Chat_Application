@@ -20,22 +20,58 @@ const getIceServers = async (req, res, next) => {
       return res.status(200).json({ iceServers: cachedIceServers });
     }
 
-    const meteredAppName = process.env.METERED_APP_NAME;
+    const rawMeteredAppName = process.env.METERED_APP_NAME;
     const meteredApiKey = process.env.METERED_API_KEY;
 
-    if (meteredAppName && meteredApiKey) {
+    if (rawMeteredAppName && meteredApiKey) {
       try {
-        const fetchUrl = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
-        const response = await fetch(fetchUrl);
-        if (response.ok) {
-          const meteredServers = await response.json();
-          if (Array.isArray(meteredServers) && meteredServers.length > 0) {
-            cachedIceServers = [...DEFAULT_ICE_SERVERS, ...meteredServers];
-            cacheExpiry = now + 1000 * 60 * 30; // 30 minutes in-memory cache
-            return res.status(200).json({ iceServers: cachedIceServers });
+        const meteredAppName = rawMeteredAppName.replace(/https?:\/\//, '').replace('.metered.live', '').trim();
+        // Attempt 1: Direct fetch via Credential API Key
+        let fetchUrl = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
+        let response = await fetch(fetchUrl);
+        let meteredServers = response.ok ? await response.json() : null;
+
+        // Attempt 2: If apiKey was a Secret Key (from Developers tab), obtain credential first
+        if (!Array.isArray(meteredServers) || meteredServers.length === 0) {
+          const secretRes = await fetch(
+            `https://${meteredAppName}.metered.live/api/v1/turn/credential?secretKey=${meteredApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            }
+          );
+          if (secretRes.ok) {
+            const credData = await secretRes.json();
+            if (credData.apiKey) {
+              const retryRes = await fetch(
+                `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${credData.apiKey}`
+              );
+              if (retryRes.ok) {
+                meteredServers = await retryRes.json();
+              }
+            } else if (credData.username && credData.password) {
+              meteredServers = [
+                { urls: 'stun:stun.relay.metered.ca:80' },
+                {
+                  urls: [
+                    'turn:global.relay.metered.ca:80',
+                    'turn:global.relay.metered.ca:80?transport=tcp',
+                    'turn:global.relay.metered.ca:443',
+                    'turns:global.relay.metered.ca:443?transport=tcp',
+                  ],
+                  username: credData.username,
+                  credential: credData.password,
+                },
+              ];
+            }
           }
-        } else {
-          console.warn('[CallController] Metered API returned status:', response.status);
+        }
+
+        if (Array.isArray(meteredServers) && meteredServers.length > 0) {
+          cachedIceServers = [...DEFAULT_ICE_SERVERS, ...meteredServers];
+          cacheExpiry = now + 1000 * 60 * 30; // 30 minutes in-memory cache
+          return res.status(200).json({ iceServers: cachedIceServers });
         }
       } catch (err) {
         console.warn('[CallController] Failed to fetch Metered TURN credentials:', err.message);

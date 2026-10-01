@@ -46,24 +46,60 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
   }
 
   // 2. Direct client-side Metered.ca fallback if configured in client env
-  const clientAppName = process.env.NEXT_PUBLIC_METERED_APP_NAME;
+  const rawClientAppName = process.env.NEXT_PUBLIC_METERED_APP_NAME;
   const clientApiKey = process.env.NEXT_PUBLIC_METERED_API_KEY;
 
-  if (clientAppName && clientApiKey) {
+  if (rawClientAppName && clientApiKey) {
     try {
-      const res = await fetch(
+      const clientAppName = rawClientAppName.replace(/https?:\/\//, '').replace('.metered.live', '').trim();
+      let res = await fetch(
         `https://${clientAppName}.metered.live/api/v1/turn/credentials?apiKey=${clientApiKey}`
       );
-      if (res.ok) {
-        const meteredServers = await res.json();
-        if (Array.isArray(meteredServers) && meteredServers.length > 0) {
-          cachedRtcConfig = {
-            iceServers: [...DEFAULT_ICE_SERVERS, ...meteredServers],
-            iceCandidatePoolSize: 10,
-          };
-          cacheTimestamp = now;
-          return cachedRtcConfig;
+      let meteredServers = res.ok ? await res.json() : null;
+
+      if (!Array.isArray(meteredServers) || meteredServers.length === 0) {
+        const secretRes = await fetch(
+          `https://${clientAppName}.metered.live/api/v1/turn/credential?secretKey=${clientApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          }
+        );
+        if (secretRes.ok) {
+          const credData = await secretRes.json();
+          if (credData.apiKey) {
+            const retry = await fetch(
+              `https://${clientAppName}.metered.live/api/v1/turn/credentials?apiKey=${credData.apiKey}`
+            );
+            if (retry.ok) {
+              meteredServers = await retry.json();
+            }
+          } else if (credData.username && credData.password) {
+            meteredServers = [
+              { urls: 'stun:stun.relay.metered.ca:80' },
+              {
+                urls: [
+                  'turn:global.relay.metered.ca:80',
+                  'turn:global.relay.metered.ca:80?transport=tcp',
+                  'turn:global.relay.metered.ca:443',
+                  'turns:global.relay.metered.ca:443?transport=tcp',
+                ],
+                username: credData.username,
+                credential: credData.password,
+              },
+            ];
+          }
         }
+      }
+
+      if (Array.isArray(meteredServers) && meteredServers.length > 0) {
+        cachedRtcConfig = {
+          iceServers: [...DEFAULT_ICE_SERVERS, ...meteredServers],
+          iceCandidatePoolSize: 10,
+        };
+        cacheTimestamp = now;
+        return cachedRtcConfig;
       }
     } catch (err) {
       console.warn('[WebRTC] Direct client metered fetch failed:', err);
