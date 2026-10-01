@@ -81,11 +81,18 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
       }
-      remoteVideoRef.current.muted = true;
       (remoteVideoRef.current as any).playsInline = true;
       remoteVideoRef.current.setAttribute('playsinline', '');
       remoteVideoRef.current.setAttribute('webkit-playsinline', '');
-      remoteVideoRef.current.play().catch(() => {});
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.volume = 1.0;
+      remoteVideoRef.current.play().catch((err) => {
+        console.warn('[ActiveCallModal] Remote video unmuted play held by browser:', err);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+      });
     }
   }, [remoteStream, isFullscreen, isVideo, callStatus, remoteVideoRef]);
 
@@ -227,14 +234,20 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
             <video
               ref={(el) => {
                 (remoteVideoRef as any).current = el;
-                if (el && remoteStream && el.srcObject !== remoteStream) {
-                  el.srcObject = remoteStream;
-                  el.play().catch(() => {});
+                if (el && remoteStream) {
+                  if (el.srcObject !== remoteStream) {
+                    el.srcObject = remoteStream;
+                  }
+                  el.muted = false;
+                  el.volume = 1.0;
+                  el.play().catch(() => {
+                    el.muted = true;
+                    el.play().catch(() => {});
+                  });
                 }
               }}
               autoPlay
               playsInline
-              muted
               className="w-full h-full object-cover sm:object-contain"
             />
 
@@ -503,14 +516,20 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
                     <video
                       ref={(el) => {
                         (remoteVideoRef as any).current = el;
-                        if (el && remoteStream && el.srcObject !== remoteStream) {
-                          el.srcObject = remoteStream;
-                          el.play().catch(() => {});
+                        if (el && remoteStream) {
+                          if (el.srcObject !== remoteStream) {
+                            el.srcObject = remoteStream;
+                          }
+                          el.muted = false;
+                          el.volume = 1.0;
+                          el.play().catch(() => {
+                            el.muted = true;
+                            el.play().catch(() => {});
+                          });
                         }
                       }}
                       autoPlay
                       playsInline
-                      muted
                       className="w-full h-full object-cover"
                     />
 

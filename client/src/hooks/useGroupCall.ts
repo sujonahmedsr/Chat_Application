@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '@/context/SocketContext';
 import { sounds } from '@/lib/sound';
+import { getWebRtcConfiguration, DEFAULT_ICE_SERVERS } from '@/lib/webrtc';
 
 export interface GroupCallParticipant {
   id: string;
@@ -20,32 +21,6 @@ export interface IncomingGroupCallData {
   participants: GroupCallParticipant[];
 }
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    // Top-tier Google STUN servers (Fast, worldwide, reliable)
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // Cloudflare STUN
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    // Twilio STUN
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    // ExpressTURN Relay servers (Handles Symmetric NAT / 4G / 5G / CGNAT mobile carriers)
-    {
-      urls: [
-        'turn:relay1.expressturn.com:3478',
-        'turn:relay1.expressturn.com:3478?transport=udp',
-        'turn:relay1.expressturn.com:3478?transport=tcp',
-      ],
-      username: 'efPGGD7Y4BSTGSXFHJ',
-      credential: 'Bj8bZ0sXfnqJRlUb',
-    },
-  ],
-  iceCandidatePoolSize: 10,
-};
-
 export const useGroupCall = (currentUserId?: string) => {
   const { socket } = useSocket();
   const [callState, setCallState] = useState<'idle' | 'calling' | 'connected'>('idle');
@@ -58,6 +33,17 @@ export const useGroupCall = (currentUserId?: string) => {
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const rtcConfigRef = useRef<RTCConfiguration>({
+    iceServers: DEFAULT_ICE_SERVERS,
+    iceCandidatePoolSize: 10,
+  });
+
+  useEffect(() => {
+    getWebRtcConfiguration().then((cfg) => {
+      rtcConfigRef.current = cfg;
+    });
+  }, []);
+
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const durationTimerRef = useRef<any>(null);
   const stopRingRef = useRef<(() => void) | null>(null);
@@ -139,7 +125,7 @@ export const useGroupCall = (currentUserId?: string) => {
     const existing = peersRef.current.get(targetUserId);
     if (existing) return existing;
 
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection(rtcConfigRef.current);
 
     // Add local audio tracks to this peer connection
     if (localStreamRef.current) {
