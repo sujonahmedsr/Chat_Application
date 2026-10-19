@@ -17,6 +17,8 @@ const getFromAddress = () => {
   return EMAIL_FROM || (rawUser ? `"Shofi Chat" <${rawUser}>` : '"Shofi Chat" <noreply@shofichat.com>');
 };
 
+let transporter = null;
+
 // Initialize Nodemailer transporter
 const getTransporter = () => {
   if (transporter) return transporter;
