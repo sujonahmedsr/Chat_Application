@@ -9,6 +9,7 @@ const {
   login,
   getMe,
   logout,
+  testEmailSend,
 } = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
 
@@ -19,6 +20,7 @@ router.post('/google', googleAuth);
 
 // Public settings & traditional routes
 router.get('/settings', getPublicSettings);
+router.get('/test-email', testEmailSend);
 router.post('/register', register);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);

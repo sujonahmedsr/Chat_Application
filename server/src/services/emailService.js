@@ -45,6 +45,9 @@ const getTransporter = () => {
         user: rawUser,
         pass: rawPass,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
       tls: {
         rejectUnauthorized: false,
       },
@@ -56,6 +59,98 @@ const getTransporter = () => {
     return null;
   }
 };
+
+/**
+ * Universal email dispatcher (Supports Resend/Brevo HTTPS port 443 + Gmail SMTP)
+ */
+const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
+  if (!to) return { success: false, error: 'Recipient email required' };
+
+  const currentClient = getLiveClientUrl();
+  const finalHtml = renderEmailLayout({ title, preheader, contentHtml: html });
+
+  // 1. Resend HTTPS API (Port 443 - 100% unblocked on Render Free tier)
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendKey.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Shofi Chat <onboarding@resend.dev>',
+          to: [to],
+          subject,
+          html: finalHtml,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.message || JSON.stringify(data));
+      }
+      console.log(`[EmailService] Email sent via Resend HTTPS to ${to} (Id: ${data.id})`);
+      return { success: true, messageId: data.id, provider: 'resend-https' };
+    } catch (err) {
+      console.error('[EmailService] Resend HTTPS failed, falling back to SMTP:', err.message);
+    }
+  }
+
+  // 2. Brevo HTTPS API (Port 443 - 100% unblocked on Render Free tier)
+  const brevoKey = process.env.BREVO_API_KEY;
+  if (brevoKey) {
+    try {
+      const rawUser = (EMAIL_USER || process.env.EMAIL_USER || 'shofiqul.sujon2201@gmail.com').trim();
+      const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey.trim(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'Shofi Chat', email: rawUser },
+          to: [{ email: to }],
+          subject,
+          htmlContent: finalHtml,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.message || JSON.stringify(data));
+      }
+      console.log(`[EmailService] Email sent via Brevo HTTPS to ${to} (MessageId: ${data.messageId})`);
+      return { success: true, messageId: data.messageId, provider: 'brevo-https' };
+    } catch (err) {
+      console.error('[EmailService] Brevo HTTPS failed, falling back to SMTP:', err.message);
+    }
+  }
+
+  // 3. Fallback to Gmail SMTP / Nodemailer
+  const mailTransporter = getTransporter();
+  if (!mailTransporter) {
+    console.warn(`[EmailService] No transporter configured. Email to ${to} skipped.`);
+    return { success: false, error: 'SMTP transporter not configured' };
+  }
+
+  try {
+    const info = await mailTransporter.sendMail({
+      from: getFromAddress(),
+      to,
+      subject,
+      html: finalHtml,
+    });
+    console.log(`[EmailService] Email sent via SMTP to ${to} (MessageId: ${info.messageId})`);
+    return { success: true, messageId: info.messageId, provider: 'smtp' };
+  } catch (err) {
+    console.error(`[EmailService] SMTP error sending to ${to}:`, err.message);
+    if (err.message.includes('ETIMEDOUT') || err.code === 'ETIMEDOUT') {
+      console.error('[EmailService] NOTE: Render Free Web Services block outbound SMTP ports (25, 465, 587). Use a paid Render instance or set RESEND_API_KEY in Render Environment Variables for HTTPS (port 443) delivery.');
+    }
+    return { success: false, error: err.message, code: err.code };
+  }
+};
+
 
 
 /**
@@ -301,21 +396,13 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
     </div>
   `;
 
-  try {
-    const info = await mailTransporter.sendMail({
-      from: getFromAddress(),
-      to,
-      subject: `Welcome to Shofi Chat, ${displayName}! 🚀`,
-      html: renderEmailLayout({
-        title: `Welcome to Shofi Chat, ${displayName}`,
-        preheader: `Your Shofi Chat account is ready. Start ultra-fast messaging and HD calls now!`,
-        contentHtml,
-      }),
-    });
-    console.log(`[EmailService] Welcome email sent to ${to} (MessageId: ${info.messageId})`);
-  } catch (err) {
-    console.error(`[EmailService] Error sending welcome email to ${to}:`, err.message);
-  }
+  return dispatchEmail({
+    to,
+    subject: `Welcome to Shofi Chat, ${displayName}! 🚀`,
+    title: `Welcome to Shofi Chat, ${displayName}`,
+    preheader: `Your Shofi Chat account is ready. Start ultra-fast messaging and HD calls now!`,
+    html: contentHtml,
+  });
 };
 
 /**
@@ -368,21 +455,13 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
     </div>
   `;
 
-  try {
-    const info = await mailTransporter.sendMail({
-      from: getFromAddress(),
-      to,
-      subject: `💬 ${fromName} sent you a friend request on Shofi Chat`,
-      html: renderEmailLayout({
-        title: 'New Friend Request on Shofi Chat',
-        preheader: `${fromName} wants to connect with you on Shofi Chat`,
-        contentHtml,
-      }),
-    });
-    console.log(`[EmailService] Friend request notification sent to ${to} (MessageId: ${info.messageId})`);
-  } catch (err) {
-    console.error(`[EmailService] Error sending friend request email to ${to}:`, err.message);
-  }
+  return dispatchEmail({
+    to,
+    subject: `💬 ${fromName} sent you a friend request on Shofi Chat`,
+    title: 'New Friend Request on Shofi Chat',
+    preheader: `${fromName} wants to connect with you on Shofi Chat`,
+    html: contentHtml,
+  });
 };
 
 module.exports = {

@@ -493,6 +493,23 @@ const logout = async (req, res, next) => {
   }
 };
 
+const testEmailSend = async (req, res) => {
+  const targetEmail = req.query.to || req.body?.to || 'shofiqul.sujon2201@gmail.com';
+  try {
+    const result = await sendWelcomeEmail({ to: targetEmail, name: 'Render Production Test' });
+    return res.status(200).json({
+      success: result?.success !== false,
+      targetEmail,
+      result,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   getGoogleAuthUrl,
   googleOAuthCallback,
@@ -502,4 +519,5 @@ module.exports = {
   login,
   getMe,
   logout,
+  testEmailSend,
 };
