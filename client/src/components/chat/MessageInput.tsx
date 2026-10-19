@@ -8,10 +8,7 @@ import {
   Trash2,
   X,
   AtSign,
-  Paperclip,
-  Image as ImageIcon,
   ArrowUp,
-  FileText,
   Search,
 } from 'lucide-react';
 import { User } from '@/types';
@@ -82,13 +79,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [activeEmojiCategory, setActiveEmojiCategory] = useState<string>('smileys');
   const [emojiSearch, setEmojiSearch] = useState('');
 
-  // Pending file attachment state (images/documents)
-  const [pendingFile, setPendingFile] = useState<{
-    file: File;
-    previewUrl: string;
-    isImage: boolean;
-  } | null>(null);
-
   // Mention state
   const [showMentions, setShowMentions] = useState(false);
   const [filteredMembers, setFilteredMembers] = useState<User[]>([]);
@@ -101,7 +91,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const typingTimeoutRef = useRef<any>(null);
   const isTypingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -183,31 +173,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }, 0);
   };
 
-  // Handle file / image picker
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const isImage = file.type.startsWith('image/');
-    const previewUrl = URL.createObjectURL(file);
-    setPendingFile({ file, previewUrl, isImage });
-    e.target.value = '';
-
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  };
-
-  const removePendingFile = () => {
-    if (pendingFile?.previewUrl) {
-      URL.revokeObjectURL(pendingFile.previewUrl);
-    }
-    setPendingFile(null);
-  };
-
   const handleSend = () => {
     const trimmed = content.trim();
-    if (!trimmed && !pendingFile) return;
+    if (!trimmed) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -215,27 +183,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     isTypingRef.current = false;
     onTypingStop();
 
-    // If pending attachment exists, convert to base64 and dispatch
-    if (pendingFile) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const fileUrl = reader.result as string;
-        onSendMessage(trimmed, {
-          messageType: pendingFile.isImage ? 'image' : 'file',
-          fileUrl,
-          fileName: pendingFile.file.name,
-          fileSize: pendingFile.file.size,
-        });
-        removePendingFile();
-        resetInput();
-      };
-      reader.readAsDataURL(pendingFile.file);
-      return;
-    }
-
     onSendMessage(trimmed);
     resetInput();
   };
+
 
   const resetInput = () => {
     setContent('');
@@ -357,11 +308,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-      if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
     };
-  }, [pendingFile]);
+  }, []);
 
-  const hasContentOrAttachment = content.trim().length > 0 || pendingFile !== null;
+  const hasContent = content.trim().length > 0;
 
   // Filter emojis by search
   const visibleEmojis = emojiSearch.trim()
@@ -370,14 +320,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   return (
     <div className="relative p-2.5 sm:px-4 sm:py-3 bg-neutral-950/90 backdrop-blur-2xl border-t border-neutral-800/80">
-      {/* Hidden file input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
-        className="hidden"
-      />
+
 
       {/* GROUP @ MENTION POPUP (Telegram Style) */}
       {showMentions && filteredMembers.length > 0 && (
@@ -545,54 +488,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       ) : (
         /* ULTRA-MODERN CHATGPT / WHATSAPP / TELEGRAM INPUT CAPSULE */
         <div className="flex flex-col bg-neutral-900/90 border border-neutral-700/60 hover:border-neutral-600 focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/15 rounded-[26px] shadow-xl shadow-black/25 transition-all duration-200">
-          {/* PENDING ATTACHMENT PREVIEW CHIP (WhatsApp / Telegram style) */}
-          {pendingFile && (
-            <div className="mx-3 mt-2.5 p-2 rounded-2xl bg-neutral-950/70 border border-neutral-800 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
-              <div className="flex items-center gap-2.5 min-w-0">
-                {pendingFile.isImage ? (
-                  <img
-                    src={pendingFile.previewUrl}
-                    alt="Preview"
-                    className="w-10 h-10 rounded-xl object-cover border border-neutral-700/50 flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-neutral-200 truncate">
-                    {pendingFile.file.name}
-                  </p>
-                  <p className="text-[10px] text-neutral-400">
-                    {(pendingFile.file.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={removePendingFile}
-                className="p-1 rounded-full text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
-                title="Remove attachment"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
           {/* MAIN INPUT ROW */}
           <div className="flex items-end gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2">
-            {/* Attachment Button (Paperclip) */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2 rounded-full text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-all active:scale-95 flex-shrink-0"
-              title="Attach photo or document"
-            >
-              <Paperclip className="w-5 h-5 rotate-45" />
-            </button>
-
             {/* Emoji Toggle Button */}
             <button
               type="button"
@@ -625,7 +522,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             </div>
 
             {/* Dynamic Action Button: Send (Circular ArrowUp/Send) vs Voice Mic */}
-            {hasContentOrAttachment ? (
+            {hasContent ? (
               <button
                 type="button"
                 onClick={handleSend}
