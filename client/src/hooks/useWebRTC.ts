@@ -15,48 +15,132 @@ const extractId = (val: any): string => {
   if (typeof val === 'object') return String(val._id || val.id || '');
   return String(val);
 };
+interface AcquiredMediaResult {
+  stream: MediaStream;
+  hasVideo: boolean;
+  hasAudio: boolean;
+}
 
 /**
- * Robust multi-tier media acquisition with fallback for mobile and desktop
+ * Robust multi-tier media acquisition with graceful fallback for mobile and desktop.
+ * Guarantees that PCs without webcams or restricted microphones can still answer video calls.
  */
-const acquireUserMedia = async (type: 'audio' | 'video'): Promise<MediaStream> => {
-  // Tier 1: Optimal HD constraints
+const acquireUserMedia = async (type: 'audio' | 'video'): Promise<AcquiredMediaResult> => {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    return { stream: new MediaStream(), hasVideo: false, hasAudio: false };
+  }
+
+  if (type === 'video') {
+    // Tier 1: Optimal constraints (ideal dimensions without strict facingMode for desktop compatibility)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+        },
+      });
+      return {
+        stream,
+        hasVideo: stream.getVideoTracks().length > 0,
+        hasAudio: stream.getAudioTracks().length > 0,
+      };
+    } catch (err1) {
+      console.warn('[WebRTC] Tier 1 HD video+audio failed, trying Tier 2 standard:', err1);
+    }
+
+    // Tier 2: Standard basic video + audio
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      return {
+        stream,
+        hasVideo: stream.getVideoTracks().length > 0,
+        hasAudio: stream.getAudioTracks().length > 0,
+      };
+    } catch (err2) {
+      console.warn('[WebRTC] Tier 2 video+audio failed (likely no camera on PC):', err2);
+    }
+
+    // Tier 3: Camera missing or busy on PC — Fallback to Audio only! (Crucial for desktop PCs without webcam)
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+      console.log('[WebRTC] Answering video call with audio-only (no webcam detected on PC)');
+      return {
+        stream: audioStream,
+        hasVideo: false,
+        hasAudio: true,
+      };
+    } catch (err3) {
+      console.warn('[WebRTC] Tier 3 audio-only fallback failed:', err3);
+    }
+
+    // Tier 4: Microphone missing or blocked — Fallback to Video only
+    try {
+      const videoStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: true,
+      });
+      return {
+        stream: videoStream,
+        hasVideo: true,
+        hasAudio: false,
+      };
+    } catch (err4) {
+      console.warn('[WebRTC] Tier 4 video-only fallback failed:', err4);
+    }
+
+    // Tier 5: Everything unavailable or blocked — return empty stream so user can STILL watch & listen to caller
+    console.warn('[WebRTC] No media inputs available. Entering receiver-only mode.');
+    return {
+      stream: new MediaStream(),
+      hasVideo: false,
+      hasAudio: false,
+    };
+  }
+
+  // Audio-only call flow
   try {
-    return await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
-      video:
-        type === 'video'
-          ? {
-              width: { ideal: 1280, max: 1920 },
-              height: { ideal: 720, max: 1080 },
-              facingMode: 'user',
-            }
-          : false,
     });
+    return {
+      stream,
+      hasVideo: false,
+      hasAudio: true,
+    };
   } catch (err1) {
-    console.warn('[WebRTC] Tier 1 HD constraints failed, trying Tier 2 standard:', err1);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      return {
+        stream,
+        hasVideo: false,
+        hasAudio: true,
+      };
+    } catch (err2) {
+      console.warn('[WebRTC] Microphone unavailable. Entering listener mode:', err2);
+      return {
+        stream: new MediaStream(),
+        hasVideo: false,
+        hasAudio: false,
+      };
+    }
   }
-
-  // Tier 2: Standard mobile friendly constraints
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: type === 'video' ? { facingMode: 'user' } : false,
-    });
-  } catch (err2) {
-    console.warn('[WebRTC] Tier 2 media constraints failed, trying Tier 3 fallback:', err2);
-  }
-
-  // Tier 3: Minimal fallback (guarantees camera/mic capture if permitted)
-  return await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: type === 'video',
-  });
 };
+
 
 interface UseWebRTCOptions {
   onCallEndedLog?: (callLog: {
@@ -388,9 +472,24 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
         };
       };
 
+      let disconnectTimer: any = null;
       pc.onconnectionstatechange = () => {
         console.log('[WebRTC] Connection state:', pc.connectionState);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        if (pc.connectionState === 'connected') {
+          if (disconnectTimer) {
+            clearTimeout(disconnectTimer);
+            disconnectTimer = null;
+          }
+        } else if (pc.connectionState === 'disconnected') {
+          // Allow up to 8s grace period for temporary network/ICE re-routing instead of immediately killing the call
+          if (!disconnectTimer) {
+            disconnectTimer = setTimeout(() => {
+              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                cleanupCall();
+              }
+            }, 8000);
+          }
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           cleanupCall();
         }
       };
@@ -435,17 +534,19 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
 
         stopSoundRef.current = sounds.playOutgoingRingtone();
 
-        const stream = await acquireUserMedia(type);
-        stream.getAudioTracks().forEach((track) => {
-          track.enabled = true;
-        });
+        const { stream, hasVideo, hasAudio } = await acquireUserMedia(type);
+        if (type === 'video' && !hasVideo) {
+          setIsCameraOff(true);
+        }
+        if (!hasAudio) {
+          setIsMuted(true);
+        }
         localStreamRef.current = stream;
         setLocalStream(stream);
-        setIsMuted(false);
 
         const pc = await createPeerConnection(targetId);
 
-        stream.getTracks().forEach((track) => {
+        stream.getTracks().forEach((track: MediaStreamTrack) => {
           pc.addTrack(track, stream);
         });
 
@@ -455,9 +556,13 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
         });
         await pc.setLocalDescription(offer);
 
+        const offerPayload = pc.localDescription?.toJSON
+          ? pc.localDescription.toJSON()
+          : { type: pc.localDescription?.type || offer.type, sdp: pc.localDescription?.sdp || offer.sdp };
+
         socket.emit('call:start', {
           to: targetId,
-          offer,
+          offer: offerPayload,
           callType: type,
         });
       } catch (err: any) {
@@ -501,38 +606,50 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       setPeerUser(peer);
       targetUserIdRef.current = callerFrom;
 
-      const stream = await acquireUserMedia(type);
-      stream.getAudioTracks().forEach((track) => {
-        track.enabled = true;
-      });
+      const { stream, hasVideo, hasAudio } = await acquireUserMedia(type);
+      if (type === 'video' && !hasVideo) {
+        setIsCameraOff(true);
+      }
+      if (!hasAudio) {
+        setIsMuted(true);
+      }
       localStreamRef.current = stream;
       setLocalStream(stream);
-      setIsMuted(false);
 
       const pc = await createPeerConnection(callerFrom);
 
-      stream.getTracks().forEach((track) => {
+      // 1. Set Remote Description FIRST so PC knows offer media m-lines
+      if (callerOffer && (callerOffer.sdp || callerOffer.type)) {
+        await pc.setRemoteDescription(new RTCSessionDescription(callerOffer));
+      }
+
+      // 2. Add local tracks to peer connection
+      stream.getTracks().forEach((track: MediaStreamTrack) => {
         pc.addTrack(track, stream);
       });
 
-      await pc.setRemoteDescription(new RTCSessionDescription(callerOffer));
-
-      // Flush all candidates that arrived before remoteDescription was set
+      // 3. Flush all candidates that arrived before remoteDescription was set
       const queuedCandidates = [...pendingCandidatesRef.current];
       pendingCandidatesRef.current = [];
       for (const cand of queuedCandidates) {
         await addCandidateSafely(pc, cand);
       }
 
+      // 4. Create Answer guaranteeing reception of audio and video
       const answer = await pc.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: type === 'video',
       });
       await pc.setLocalDescription(answer);
 
+      // 5. Serialize answer cleanly for Socket.io
+      const answerPayload = pc.localDescription?.toJSON
+        ? pc.localDescription.toJSON()
+        : { type: pc.localDescription?.type || answer.type, sdp: pc.localDescription?.sdp || answer.sdp };
+
       socket.emit('call:answer', {
         to: callerFrom,
-        answer,
+        answer: answerPayload,
       });
 
       durationTimerRef.current = setInterval(() => {
@@ -540,7 +657,9 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       }, 1000);
     } catch (err: any) {
       console.warn('[WebRTC] Error answering call:', err);
-      cleanupCall();
+      if (callStatusRef.current !== 'connected') {
+        cleanupCall();
+      }
     }
   }, [socket, incomingCall, createPeerConnection, cleanupCall, unlockAudioPipeline]);
 
@@ -769,20 +888,28 @@ export const useWebRTC = (options?: UseWebRTCOptions) => {
       }
 
       if (pcRef.current) {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        try {
+          if (pcRef.current.signalingState !== 'stable' && answer && (answer.sdp || answer.type)) {
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+          }
 
-        // Flush all pending candidates that arrived early
-        const queuedCandidates = [...pendingCandidatesRef.current];
-        pendingCandidatesRef.current = [];
-        for (const cand of queuedCandidates) {
-          await addCandidateSafely(pcRef.current, cand);
+          // Flush all pending candidates that arrived early
+          const queuedCandidates = [...pendingCandidatesRef.current];
+          pendingCandidatesRef.current = [];
+          for (const cand of queuedCandidates) {
+            await addCandidateSafely(pcRef.current, cand);
+          }
+
+          setCallStatus('connected');
+
+          if (!durationTimerRef.current) {
+            durationTimerRef.current = setInterval(() => {
+              setDuration((prev) => prev + 1);
+            }, 1000);
+          }
+        } catch (err) {
+          console.warn('[WebRTC] Error setting remote description from answer:', err);
         }
-
-        setCallStatus('connected');
-
-        durationTimerRef.current = setInterval(() => {
-          setDuration((prev) => prev + 1);
-        }, 1000);
       }
     };
 
