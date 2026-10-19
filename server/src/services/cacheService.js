@@ -3,8 +3,8 @@ const { getRedisClient, isRedisConnected } = require('../config/redis');
 // In-memory fallback cache store for ultra-fast performance if Redis is not running
 const memoryStore = new Map();
 
-// Periodic cleanup of expired in-memory items
-setInterval(() => {
+// Periodic cleanup of expired in-memory items (unref to avoid hanging CLI / build tasks)
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of memoryStore.entries()) {
     if (entry.expiresAt && entry.expiresAt <= now) {
@@ -12,6 +12,9 @@ setInterval(() => {
     }
   }
 }, 60000);
+if (cleanupInterval.unref) {
+  cleanupInterval.unref();
+}
 
 class CacheService {
   constructor() {
