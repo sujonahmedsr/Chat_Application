@@ -19,7 +19,7 @@ module.exports = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
   EMAIL_HOST: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
   EMAIL_PORT: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '465', 10),
-  EMAIL_SECURE: process.env.EMAIL_SECURE === 'true' || true,
+  EMAIL_SECURE: process.env.EMAIL_SECURE === 'true',
   EMAIL_USER: process.env.EMAIL_USER || process.env.SMTP_USER || 'shofiqul.sujon2201@gmail.com',
   EMAIL_PASS: process.env.EMAIL_PASS || process.env.SMTP_PASS || 'ykiq zcfo dxep cntz',
   EMAIL_FROM: process.env.EMAIL_FROM || '"Shofi Chat" <shofiqul.sujon2201@gmail.com>',

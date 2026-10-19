@@ -10,11 +10,20 @@ const cacheService = require('../services/cacheService');
 const MAX_SOCKET_MESSAGES = 300;
 
 const registerChatHandlers = (io, socket) => {
-  // Join a new group room dynamically
-  socket.on('group:join', ({ groupId }) => {
-    if (groupId) {
-      socket.join(`group:${groupId}`);
-      console.log(`[Socket] User ${socket.userId} joined group:${groupId}`);
+  // Join a new group room dynamically (Authorized members only)
+  socket.on('group:join', async ({ groupId }) => {
+    if (groupId && socket.userId) {
+      try {
+        const grp = await Group.findById(groupId);
+        if (grp) {
+          const isMember = (grp.members || []).some((m) => String(m._id || m) === String(socket.userId)) ||
+            String(grp.creator?._id || grp.creator) === String(socket.userId);
+          if (isMember) {
+            socket.join(`group:${groupId}`);
+            console.log(`[Socket] User ${socket.userId} joined group:${groupId}`);
+          }
+        }
+      } catch (e) {}
     }
   });
 
@@ -72,6 +81,18 @@ const registerChatHandlers = (io, socket) => {
 
       // Group message flow - capped to 300 messages
       if (groupId) {
+        const grp = await Group.findById(groupId);
+        if (!grp) {
+          if (callback) callback({ error: 'Group not found' });
+          return;
+        }
+        const isMember = (grp.members || []).some((m) => String(m._id || m) === String(senderId)) ||
+          String(grp.creator?._id || grp.creator) === String(senderId);
+        if (!isMember) {
+          if (callback) callback({ error: 'You are not a member of this group' });
+          return;
+        }
+
         socket.join(`group:${groupId}`);
         const messageData = {
           senderId,
@@ -167,12 +188,18 @@ const registerChatHandlers = (io, socket) => {
       };
 
       // Save inside nested Conversation document with 300 cap
-      await Conversation.findOneAndUpdate(
-        {
-          participants: { $all: [senderId, receiverId] },
-        },
-        {
-          $setOnInsert: { participants: [senderId, receiverId] },
+      let conv = await Conversation.findOne({
+        participants: { $all: [senderId, receiverId] },
+      });
+
+      if (!conv) {
+        conv = await Conversation.create({
+          participants: [senderId, receiverId],
+          messages: [nestedData],
+          lastMessage: nestedData,
+        });
+      } else {
+        await Conversation.findByIdAndUpdate(conv._id, {
           $push: {
             messages: {
               $each: [nestedData],
@@ -180,9 +207,8 @@ const registerChatHandlers = (io, socket) => {
             },
           },
           $set: { lastMessage: nestedData, updatedAt: new Date() },
-        },
-        { upsert: true, new: true }
-      );
+        });
+      }
 
       // Async clean flat 1-to-1 messages beyond 300
       Message.find({

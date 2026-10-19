@@ -65,6 +65,9 @@ const getTransporter = () => {
  */
 const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
   if (!to) return { success: false, error: 'Recipient email required' };
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, messageId: 'test-mock-id', provider: 'test-mock' };
+  }
 
   const currentClient = getLiveClientUrl();
   const finalHtml = renderEmailLayout({ title, preheader, contentHtml: html, to });

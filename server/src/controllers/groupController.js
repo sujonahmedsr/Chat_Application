@@ -132,6 +132,21 @@ const getUserGroups = async (req, res, next) => {
 const getGroupMessages = async (req, res, next) => {
   try {
     const { groupId } = req.params;
+    const currentUserId = req.user._id;
+
+    const group = await Group.findById(groupId).populate('messages.senderId', 'name email avatar');
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+    const isMember = isSuperAdmin ||
+      (group.members || []).some((m) => String(m._id || m) === String(currentUserId)) ||
+      String(group.creator?._id || group.creator) === String(currentUserId);
+
+    if (!isMember) {
+      return res.status(403).json({ message: 'Access denied: You are not a member of this group' });
+    }
 
     // Fast Redis cache check
     const cachedMessages = await cacheService.getGroupMessagesCache(groupId);
@@ -140,8 +155,7 @@ const getGroupMessages = async (req, res, next) => {
     }
 
     let resultMessages = [];
-    const group = await Group.findById(groupId).populate('messages.senderId', 'name email avatar');
-    if (group && group.messages && group.messages.length > 0) {
+    if (group.messages && group.messages.length > 0) {
       let msgs = group.messages;
       if (msgs.length > MAX_GROUP_MESSAGES) {
         msgs = msgs.slice(-MAX_GROUP_MESSAGES);

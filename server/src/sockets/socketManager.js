@@ -21,28 +21,22 @@ const initSocket = (httpServer, clientUrl) => {
 
   ioInstance = io;
 
-  // Socket middleware for authentication
+  // Socket middleware for authentication (Strict JWT token verification)
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-      const userId = socket.handshake.auth?.userId || socket.handshake.query?.userId;
 
-      if (token) {
-        try {
-          const decoded = verifyToken(token);
-          socket.userId = decoded.id;
-          return next();
-        } catch (err) {
-          console.warn('[Socket] Token verification failed:', err.message);
-        }
+      if (!token) {
+        return next(new Error('Authentication error: JWT token required'));
       }
 
-      if (userId) {
-        socket.userId = String(userId);
+      try {
+        const decoded = verifyToken(token);
+        socket.userId = decoded.id;
         return next();
+      } catch (err) {
+        return next(new Error('Authentication error: Invalid or expired token'));
       }
-
-      return next(new Error('Authentication error: Token or userId required'));
     } catch (err) {
       return next(new Error('Socket authentication failed'));
     }

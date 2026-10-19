@@ -219,12 +219,18 @@ const sendMessage = async (req, res, next) => {
     };
 
     // Save inside nested Conversation document with 300 slice cap
-    await Conversation.findOneAndUpdate(
-      {
-        participants: { $all: [currentUserId, receiverId] },
-      },
-      {
-        $setOnInsert: { participants: [currentUserId, receiverId] },
+    let conv = await Conversation.findOne({
+      participants: { $all: [currentUserId, receiverId] },
+    });
+
+    if (!conv) {
+      conv = await Conversation.create({
+        participants: [currentUserId, receiverId],
+        messages: [nestedData],
+        lastMessage: nestedData,
+      });
+    } else {
+      await Conversation.findByIdAndUpdate(conv._id, {
         $push: {
           messages: {
             $each: [nestedData],
@@ -232,9 +238,8 @@ const sendMessage = async (req, res, next) => {
           },
         },
         $set: { lastMessage: nestedData, updatedAt: new Date() },
-      },
-      { upsert: true, new: true }
-    );
+      });
+    }
 
     // Asynchronously prune older messages beyond 300
     enforceMessageCap(currentUserId, receiverId);
