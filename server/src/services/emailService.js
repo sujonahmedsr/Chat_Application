@@ -189,8 +189,6 @@ const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
   }
 };
 
-
-
 /**
  * Base email wrapper with responsive HTML styling (Clean White Base, Zero Overflow/Scroll issues)
  */
@@ -288,7 +286,7 @@ const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
                   <td align="center" style="vertical-align: middle; padding: 0;">
                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="48" height="48" style="width: 48px; height: 48px; margin: 0 auto; background-color: #059669; border-radius: 12px; border-collapse: separate; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);">
                       <tr>
-                        <td align="center" valign="middle" style="width: 48px; height: 48px; text-align: center; vertical-align: middle; padding: 0; font-size: 24px; line-height: 48px; mso-line-height-rule: exactly;">
+                        <td align="center" valign="middle" style="width: 48px; height: 48px; text-align: center; vertical-align: middle; padding: 0; font-size: 24px; line-height: 1; mso-line-height-rule: exactly;">
                           &#128172;
                         </td>
                       </tr>
@@ -362,10 +360,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
         <td style="padding: 12px 18px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
             <tr>
-              <td style="width: 24px; vertical-align: middle; font-size: 16px; line-height: 1;">
+              <td align="center" style="width: 24px; vertical-align: middle; font-size: 16px; line-height: 1; text-align: center;">
                 &#128100;
               </td>
-              <td style="vertical-align: middle;">
+              <td style="vertical-align: middle; padding-left: 6px;">
                 <strong style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: #0f172a;">Account Credentials &amp; Status</strong>
               </td>
             </tr>
@@ -409,10 +407,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
       <!-- Feature item 1: Realtime Messaging -->
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 9px; border-collapse: separate; text-align: center;">
+          <td align="center" style="width: 58px; vertical-align: middle; padding: 12px 0 12px 14px; text-align: center;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="40" height="40" style="width: 40px; height: 40px; margin: 0 auto; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 9px; border-collapse: separate;">
               <tr>
-                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                <td align="center" valign="middle" style="width: 40px; height: 40px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 1; padding: 0;">
                   &#128172;
                 </td>
               </tr>
@@ -430,10 +428,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
       <!-- Feature item 2: Encryption -->
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 9px; border-collapse: separate; text-align: center;">
+          <td align="center" style="width: 58px; vertical-align: middle; padding: 12px 0 12px 14px; text-align: center;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="40" height="40" style="width: 40px; height: 40px; margin: 0 auto; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 9px; border-collapse: separate;">
               <tr>
-                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                <td align="center" valign="middle" style="width: 40px; height: 40px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 1; padding: 0;">
                   &#128274;
                 </td>
               </tr>
@@ -451,10 +449,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
       <!-- Feature item 3: HD Voice & Video Calling -->
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9px; border-collapse: separate; text-align: center;">
+          <td align="center" style="width: 58px; vertical-align: middle; padding: 12px 0 12px 14px; text-align: center;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="40" height="40" style="width: 40px; height: 40px; margin: 0 auto; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9px; border-collapse: separate;">
               <tr>
-                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                <td align="center" valign="middle" style="width: 40px; height: 40px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 1; padding: 0;">
                   &#128249;
                 </td>
               </tr>
@@ -472,10 +470,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
       <!-- Feature item 4: Group Spaces & Channels -->
       <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 9px; border-collapse: separate; text-align: center;">
+          <td align="center" style="width: 58px; vertical-align: middle; padding: 12px 0 12px 14px; text-align: center;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="40" height="40" style="width: 40px; height: 40px; margin: 0 auto; background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 9px; border-collapse: separate;">
               <tr>
-                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                <td align="center" valign="middle" style="width: 40px; height: 40px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 1; padding: 0;">
                   &#128101;
                 </td>
               </tr>
@@ -511,10 +509,10 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
     <!-- Pro Tip Notice Box -->
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; table-layout: fixed;">
       <tr>
-        <td style="width: 38px; vertical-align: top; padding: 14px 0 14px 16px; font-size: 18px; line-height: 1;">
+        <td align="center" style="width: 44px; vertical-align: middle; padding: 14px 0 14px 14px; text-align: center; font-size: 20px; line-height: 1;">
           &#128161;
         </td>
-        <td style="padding: 13px 16px 13px 8px; font-size: 13px; line-height: 1.5; color: #166534; vertical-align: top;">
+        <td style="padding: 13px 16px 13px 10px; font-size: 13px; line-height: 1.5; color: #166534; vertical-align: middle;">
           <strong style="color: #15803d; display: block; margin-bottom: 2px;">Quick Start Tip:</strong>
           You can add friends by searching for their username or email directly from the contacts tab. Once accepted, you can initiate one-click HD calls instantly!
         </td>
@@ -559,10 +557,14 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
         <td style="padding: 18px 20px;">
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
             <tr>
-              <td style="width: 52px; vertical-align: middle;">
-                <div style="width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background-color: #e2e8f0; border: 2px solid #059669;">
-                  <img src="${safeAvatar}" alt="${fromName}" width="48" height="48" style="width: 48px; height: 48px; display: block; object-fit: cover; border-radius: 50%;" />
-                </div>
+              <td align="center" style="width: 52px; vertical-align: middle; text-align: center;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="48" height="48" style="width: 48px; height: 48px; margin: 0 auto; border-radius: 50%; border: 2px solid #059669; border-collapse: separate; overflow: hidden;">
+                  <tr>
+                    <td align="center" valign="middle" style="width: 48px; height: 48px; padding: 0; text-align: center; vertical-align: middle;">
+                      <img src="${safeAvatar}" alt="${fromName}" width="48" height="48" style="width: 48px; height: 48px; display: block; border-radius: 50%; object-fit: cover;" />
+                    </td>
+                  </tr>
+                </table>
               </td>
               <td style="padding-left: 16px; vertical-align: middle;">
                 <div style="font-weight: 700; color: #0f172a; font-size: 16px;">${fromName}</div>
