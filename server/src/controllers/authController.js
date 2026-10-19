@@ -10,6 +10,7 @@ const {
   GOOGLE_CALLBACK_URL,
   CLIENT_URL,
 } = require('../config/config');
+const cacheService = require('../services/cacheService');
 
 // Helper to decode or verify Google credential if provided
 const decodeGoogleCredential = (credential) => {
@@ -104,14 +105,22 @@ const googleOAuthCallback = async (req, res, next) => {
       return res.redirect(`${targetClient}/login?error=Google_token_exchange_failed`);
     }
 
-    // Fetch user profile from Google using access token
-    const userinfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-      },
-    });
+    // Ultra-Fast Profile Resolution: Google id_token is already signed JWT with profile details
+    let googleUser = null;
+    if (tokenData.id_token) {
+      googleUser = jwt.decode(tokenData.id_token);
+    }
 
-    const googleUser = await userinfoResponse.json();
+    // Fallback: only make secondary external Google HTTP call if id_token was missing
+    if (!googleUser || !googleUser.email) {
+      const userinfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
+      });
+      googleUser = await userinfoResponse.json();
+    }
+
     if (!googleUser || !googleUser.email) {
       return res.redirect(`${targetClient}/login?error=Google_profile_fetch_failed`);
     }
@@ -156,6 +165,10 @@ const googleOAuthCallback = async (req, res, next) => {
       user.lastSeen = new Date();
       await user.save();
     }
+
+    // Cache user profile in Redis for instant subsequent lookups
+    const userJson = user.toJSON();
+    await cacheService.setUserCache(user._id, userJson);
 
     const jwtToken = generateToken(user._id);
 
@@ -242,10 +255,12 @@ const googleAuth = async (req, res, next) => {
     }
 
     const token = generateToken(user._id);
+    const userJson = user.toJSON();
+    await cacheService.setUserCache(user._id, userJson);
 
     return res.status(200).json({
       success: true,
-      user: user.toJSON(),
+      user: userJson,
       token,
     });
   } catch (error) {
@@ -404,7 +419,10 @@ const getMe = async (req, res, next) => {
       await req.user.save();
     }
 
-    return res.status(200).json({ user: req.user.toJSON() });
+    const userJson = req.user.toJSON();
+    await cacheService.setUserCache(req.user._id, userJson);
+
+    return res.status(200).json({ user: userJson });
   } catch (error) {
     next(error);
   }
@@ -416,6 +434,7 @@ const logout = async (req, res, next) => {
       req.user.isOnline = false;
       req.user.lastSeen = new Date();
       await req.user.save();
+      await cacheService.invalidateUser(req.user._id);
     }
     return res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {

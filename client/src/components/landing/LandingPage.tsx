@@ -33,7 +33,7 @@ export const LandingPage: React.FC = () => {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-neutral-950/70 border-b border-neutral-800/80 transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand Logo */}
-          <a href='/' className="flex items-center gap-3">
+          <Link href='/' className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-900/30">
               <MessageSquare className="w-5 h-5 text-white" />
             </div>
@@ -43,7 +43,7 @@ export const LandingPage: React.FC = () => {
               </span>
 
             </div>
-          </a>
+          </Link>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3">

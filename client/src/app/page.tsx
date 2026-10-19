@@ -70,6 +70,8 @@ export default function ChatDashboard() {
   const currentUserRef = useRef<User | null>(null);
   const usersRef = useRef<User[]>([]);
   const groupsRef = useRef<Group[]>([]);
+  // High-speed in-memory message cache for instant 0ms chat transitions
+  const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
 
   useEffect(() => {
     selectedUserRef.current = selectedUser;
@@ -264,11 +266,14 @@ export default function ChatDashboard() {
     }
   }, [socket, groups]);
 
+  // Parallel dashboard initial data loading
   useEffect(() => {
     if (currentUser) {
-      fetchFriends();
-      fetchGroups();
-      fetchPendingRequestsCount();
+      Promise.allSettled([
+        fetchFriends(),
+        fetchGroups(),
+        fetchPendingRequestsCount(),
+      ]).catch(() => {});
     }
   }, [currentUser, fetchFriends, fetchGroups, fetchPendingRequestsCount]);
 
@@ -298,7 +303,7 @@ export default function ChatDashboard() {
     });
   }, [onlineUserIds]);
 
-  // Select 1-to-1 User chat
+  // Select 1-to-1 User chat with Instant 0ms cache rendering
   const handleSelectUser = async (targetUser: User) => {
     setSelectedUser(targetUser);
     setSelectedGroup(null);
@@ -306,17 +311,27 @@ export default function ChatDashboard() {
     setIsRecipientTyping(false);
     setGroupTypingUser(null);
 
-    try {
+    // Instant UI display if previously cached in memory
+    const cached = messageCacheRef.current.get(targetUser.id);
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      setIsLoadingMessages(false);
+    } else {
       setIsLoadingMessages(true);
+    }
+
+    try {
       const data = await apiRequest(`/messages/${targetUser.id}`);
       const rawMessages: Message[] = data.messages || [];
+      let finalDecrypted: Message[] = rawMessages;
+
       if (currentUser) {
         const convId = getConversationId(currentUser.id, targetUser.id);
-        const decrypted = await decryptMessageList(rawMessages, convId);
-        setMessages(decrypted);
-      } else {
-        setMessages(rawMessages);
+        finalDecrypted = await decryptMessageList(rawMessages, convId);
       }
+
+      setMessages(finalDecrypted);
+      messageCacheRef.current.set(targetUser.id, finalDecrypted);
 
       await apiRequest(`/messages/${targetUser.id}/read`, { method: 'PUT' });
       if (socket) {
@@ -333,7 +348,7 @@ export default function ChatDashboard() {
     }
   };
 
-  // Select Group chat
+  // Select Group chat with Instant 0ms cache rendering
   const handleSelectGroup = async (group: Group) => {
     setSelectedGroup(group);
     setSelectedUser(null);
@@ -341,17 +356,27 @@ export default function ChatDashboard() {
     setIsRecipientTyping(false);
     setGroupTypingUser(null);
 
-    try {
+    // Instant UI display if previously cached in memory
+    const cached = messageCacheRef.current.get(group.id);
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      setIsLoadingMessages(false);
+    } else {
       setIsLoadingMessages(true);
+    }
+
+    try {
       const data = await apiRequest(`/groups/${group.id}/messages`);
       const rawMessages: Message[] = data.messages || [];
+      let finalDecrypted: Message[] = rawMessages;
+
       if (currentUser) {
         const convId = getConversationId(currentUser.id, undefined, group.id);
-        const decrypted = await decryptMessageList(rawMessages, convId);
-        setMessages(decrypted);
-      } else {
-        setMessages(rawMessages);
+        finalDecrypted = await decryptMessageList(rawMessages, convId);
       }
+
+      setMessages(finalDecrypted);
+      messageCacheRef.current.set(group.id, finalDecrypted);
 
       if (socket) {
         socket.emit('group:join', { groupId: group.id });
@@ -777,6 +802,11 @@ export default function ChatDashboard() {
           return [...prev, displayMessage];
         });
 
+        const currG = messageCacheRef.current.get(groupIdStr) || [];
+        if (!currG.some((m) => extractId(m.id || (m as any)._id) === msgIdStr)) {
+          messageCacheRef.current.set(groupIdStr, [...currG, displayMessage]);
+        }
+
         if (!isSentByMe) {
           playNotificationSound();
           if (
@@ -832,6 +862,12 @@ export default function ChatDashboard() {
     const handleMessageDeleted = ({ messageId }: { messageId: string }) => {
       const targetId = extractId(messageId);
       setMessages((prev) => prev.filter((m) => extractId(m.id || (m as any)._id) !== targetId));
+      messageCacheRef.current.forEach((msgs, key) => {
+        messageCacheRef.current.set(
+          key,
+          msgs.filter((m) => extractId(m.id || (m as any)._id) !== targetId)
+        );
+      });
     };
 
     // Friend requests listeners

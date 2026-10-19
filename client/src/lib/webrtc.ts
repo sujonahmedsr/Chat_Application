@@ -52,7 +52,7 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
   if (rawClientAppName && clientApiKey) {
     try {
       const clientAppName = rawClientAppName.replace(/https?:\/\//, '').replace('.metered.live', '').trim();
-      let res = await fetch(
+      const res = await fetch(
         `https://${clientAppName}.metered.live/api/v1/turn/credentials?apiKey=${clientApiKey}`
       );
       let meteredServers = res.ok ? await res.json() : null;

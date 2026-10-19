@@ -3,7 +3,7 @@ const { Conversation } = require('../models/Conversation');
 const Message = require('../models/Message');
 const { isUserOnline } = require('../sockets/presenceHandler');
 const { decryptServerMessage } = require('../utils/encryption');
-
+const cacheService = require('../services/cacheService');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 
 // Get all confirmed friends for current user
@@ -11,7 +11,23 @@ const getFriends = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
 
-    // Fetch current user with populated friends and blockedUsers
+    // 1. Fast Redis Cache lookup (Ultra-fast <2ms response)
+    const cachedFriends = await cacheService.getFriendsCache(currentUserId);
+    if (cachedFriends && Array.isArray(cachedFriends)) {
+      // Sync real-time online presence in memory before returning
+      const liveFriends = cachedFriends.map((f) => {
+        const fId = f.id || f._id;
+        const online = isUserOnline(fId);
+        return {
+          ...f,
+          isOnline: online,
+          lastSeen: online ? new Date() : f.lastSeen,
+        };
+      });
+      return res.status(200).json({ friends: liveFriends });
+    }
+
+    // 2. Fetch current user with populated friends and blockedUsers
     const currentUser = await User.findById(currentUserId).populate(
       'friends',
       'name email avatar isOnline lastSeen blockedUsers'
@@ -32,44 +48,57 @@ const getFriends = async (req, res, next) => {
       return !isBlockedByMe && !hasBlockedMe;
     });
 
-    // Enrich with live presence and conversation preview
-    const enrichedFriends = await Promise.all(
-      friends.map(async (f) => {
-        const conversation = await Conversation.findOne({
-          participants: { $all: [currentUserId, f._id] },
-        });
+    // 3. Single-query batch fetch for all conversations (eliminates N+1 queries)
+    const conversations = await Conversation.find({
+      participants: currentUserId,
+    }).lean();
 
-        // Compute unread count from nested messages
-        let unreadCount = 0;
-        let lastMessage = null;
+    const convMap = new Map();
+    for (const conv of conversations) {
+      const otherId = (conv.participants || []).find((p) => String(p) !== String(currentUserId));
+      if (otherId) {
+        convMap.set(String(otherId), conv);
+      }
+    }
 
-        if (conversation && conversation.messages?.length > 0) {
-          const msgs = conversation.messages;
-          lastMessage = msgs[msgs.length - 1];
+    // 4. Enrich friends in memory
+    const enrichedFriends = friends.map((f) => {
+      const fId = String(f._id || f.id);
+      const conversation = convMap.get(fId);
 
-          unreadCount = msgs.filter(
-            (m) => String(m.senderId) === String(f._id) && m.status !== 'read'
-          ).length;
-        }
+      // Compute unread count from nested messages
+      let unreadCount = 0;
+      let lastMessage = null;
 
-        const online = isUserOnline(f._id);
+      if (conversation && conversation.messages?.length > 0) {
+        const msgs = conversation.messages;
+        lastMessage = msgs[msgs.length - 1];
 
-        let lastMessageJSON = null;
-        if (lastMessage) {
-          const lm = lastMessage.toJSON ? lastMessage.toJSON() : { ...lastMessage };
-          lm.content = decryptServerMessage(lm.content);
-          lastMessageJSON = lm;
-        }
+        unreadCount = msgs.filter(
+          (m) => String(m.senderId) === fId && m.status !== 'read'
+        ).length;
+      }
 
-        return {
-          ...f.toJSON(),
-          isOnline: online,
-          lastSeen: online ? new Date() : f.lastSeen,
-          unreadCount,
-          lastMessage: lastMessageJSON,
-        };
-      })
-    );
+      const online = isUserOnline(f._id);
+
+      let lastMessageJSON = null;
+      if (lastMessage) {
+        const lm = lastMessage.toJSON ? lastMessage.toJSON() : { ...lastMessage };
+        lm.content = decryptServerMessage(lm.content);
+        lastMessageJSON = lm;
+      }
+
+      return {
+        ...f.toJSON(),
+        isOnline: online,
+        lastSeen: online ? new Date() : f.lastSeen,
+        unreadCount,
+        lastMessage: lastMessageJSON,
+      };
+    });
+
+    // 5. Store in Redis cache (TTL 300s)
+    await cacheService.setFriendsCache(currentUserId, enrichedFriends, 300);
 
     return res.status(200).json({ friends: enrichedFriends });
   } catch (error) {
@@ -261,6 +290,12 @@ const acceptFriendRequest = async (req, res, next) => {
       });
     }
 
+    // Invalidate Redis friends cache for both users
+    await Promise.all([
+      cacheService.invalidateFriends(currentUserId),
+      cacheService.invalidateFriends(fromUserId),
+    ]);
+
     try {
       const { getIO } = require('../sockets/socketManager');
       getIO().to(`user:${fromUserId}`).emit('friend:request:accepted', {
@@ -324,6 +359,12 @@ const unfriendUser = async (req, res, next) => {
     await User.findByIdAndUpdate(targetUserId, {
       $pull: { friends: currentUserId },
     });
+
+    // Invalidate Redis friends cache for both users
+    await Promise.all([
+      cacheService.invalidateFriends(currentUserId),
+      cacheService.invalidateFriends(targetUserId),
+    ]);
 
     try {
       const { getIO } = require('../sockets/socketManager');
@@ -433,6 +474,13 @@ const blockUser = async (req, res, next) => {
       console.error('[blockUser] Socket emit error:', e);
     }
 
+    // Invalidate Redis cache
+    await Promise.all([
+      cacheService.invalidateFriends(currentUserId),
+      cacheService.invalidateFriends(targetUserId),
+      cacheService.invalidateDirectMessages(currentUserId, targetUserId),
+    ]);
+
     return res.status(200).json({ success: true, message: 'User blocked and unfriended successfully' });
   } catch (error) {
     next(error);
@@ -471,6 +519,12 @@ const unblockUser = async (req, res, next) => {
         unblockedBy: 'self',
       });
     } catch (e) {}
+
+    // Invalidate Redis friends cache
+    await Promise.all([
+      cacheService.invalidateFriends(currentUserId),
+      cacheService.invalidateFriends(targetUserId),
+    ]);
 
     return res.status(200).json({ success: true, message: 'User unblocked successfully' });
   } catch (error) {

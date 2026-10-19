@@ -1,16 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { MessageSquare, ShieldCheck, Loader2, Sparkles, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { MessageSquare, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { initNotificationAndAudioOnce } from '@/lib/notification';
 
 export default function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const router = useRouter();
 
   // Check URL query parameters for errors (?error=...)
   useEffect(() => {
@@ -24,6 +21,22 @@ export default function LoginPage() {
     }
   }, []);
 
+  const [prefetchedGoogleUrl, setPrefetchedGoogleUrl] = useState<string>('');
+
+  // Pre-fetch Google OAuth 2.0 URL as soon as the login page loads for instant 0ms click redirect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const currentOrigin = window.location.origin;
+      apiRequest(`/auth/google/url?client_url=${encodeURIComponent(currentOrigin)}`)
+        .then((data) => {
+          if (data?.hasClientId && data?.url) {
+            setPrefetchedGoogleUrl(data.url);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Direct Google OAuth 2.0 Flow
   const handleDirectGoogleLogin = async () => {
     try {
@@ -33,11 +46,16 @@ export default function LoginPage() {
       // Pre-warm sound audio context and prompt notification once on user click
       initNotificationAndAudioOnce().catch(() => {});
 
-      // Check backend for Direct Google OAuth 2.0 URL
+      // Instant redirect if already pre-warmed / prefetched (0ms latency!)
+      if (prefetchedGoogleUrl) {
+        window.location.href = prefetchedGoogleUrl;
+        return;
+      }
+
+      // Fallback: Check backend for Direct Google OAuth 2.0 URL
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
       const data = await apiRequest(`/auth/google/url${currentOrigin ? `?client_url=${encodeURIComponent(currentOrigin)}` : ''}`);
       if (data.hasClientId && data.url) {
-        // Direct redirect to Google's official login page!
         window.location.href = data.url;
         return;
       }

@@ -5,6 +5,7 @@ const { Conversation } = require('../models/Conversation');
 const { isUserOnline } = require('./presenceHandler');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 const { encryptServerMessage, decryptServerMessage } = require('../utils/encryption');
+const cacheService = require('../services/cacheService');
 
 const MAX_SOCKET_MESSAGES = 300;
 
@@ -130,6 +131,9 @@ const registerChatHandlers = (io, socket) => {
         // Broadcast to all sockets in the group room
         io.to(`group:${String(groupId)}`).emit('group:message:receive', messageJSON);
 
+        // Invalidate Redis cache for group
+        cacheService.invalidateGroupMessages(groupId).catch(() => {});
+
         if (callback) {
           callback({ success: true, message: messageJSON, tempId });
         }
@@ -215,6 +219,9 @@ const registerChatHandlers = (io, socket) => {
       // Realtime Sync across sender's other devices/tabs (e.g. mobile <-> desktop)
       socket.to(`user:${String(senderId)}`).emit('message:receive', messageJSON);
       socket.to(`user:${String(senderId)}`).emit('message:sent-sync', messageJSON);
+
+      // Invalidate Redis cache for both direct conversation participants
+      cacheService.invalidateDirectMessages(senderId, receiverId).catch(() => {});
     } catch (err) {
       console.error('[ChatHandler] Error sending message:', err);
       if (callback) callback({ error: 'Failed to send message' });

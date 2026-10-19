@@ -3,6 +3,7 @@ const { Conversation } = require('../models/Conversation');
 const Group = require('../models/Group');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 const { encryptServerMessage, decryptServerMessage } = require('../utils/encryption');
+const cacheService = require('../services/cacheService');
 
 const MAX_CHAT_MESSAGES = 300;
 
@@ -33,6 +34,12 @@ const getChatHistory = async (req, res, next) => {
     const targetUserId = req.params.userId;
     const userSettings = req.user.settings || {};
 
+    // 1. Fast Redis cache check
+    const cachedMessages = await cacheService.getMessagesCache(currentUserId, targetUserId);
+    if (cachedMessages && Array.isArray(cachedMessages) && userSettings.saveChatHistory !== false) {
+      return res.status(200).json({ messages: cachedMessages });
+    }
+
     // Calculate retention cutoff if configured
     let cutoffDate = null;
     if (userSettings.saveChatHistory === false) {
@@ -41,6 +48,8 @@ const getChatHistory = async (req, res, next) => {
     } else if (userSettings.chatRetentionDays && userSettings.chatRetentionDays > 0) {
       cutoffDate = new Date(Date.now() - userSettings.chatRetentionDays * 24 * 60 * 60 * 1000);
     }
+
+    let finalMessages = [];
 
     // Check nested Conversation document first
     const conv = await Conversation.findOne({
@@ -58,37 +67,33 @@ const getChatHistory = async (req, res, next) => {
       if (filteredMessages.length > MAX_CHAT_MESSAGES) {
         filteredMessages = filteredMessages.slice(-MAX_CHAT_MESSAGES);
       }
-      return res.status(200).json({
-        messages: filteredMessages.map((m) => {
-          const json = m.toJSON ? m.toJSON() : m;
-          return {
-            ...json,
-            id: String(json._id || json.id),
-            content: decryptServerMessage(json.content),
-            reactions: json.reactions || [],
-          };
-        }),
+      finalMessages = filteredMessages.map((m) => {
+        const json = m.toJSON ? m.toJSON() : m;
+        return {
+          ...json,
+          id: String(json._id || json.id),
+          content: decryptServerMessage(json.content),
+          reactions: json.reactions || [],
+        };
       });
-    }
+    } else {
+      // Fallback to flat messages collection
+      const query = {
+        $or: [
+          { senderId: currentUserId, receiverId: targetUserId },
+          { senderId: targetUserId, receiverId: currentUserId },
+        ],
+      };
 
-    // Fallback to flat messages collection
-    const query = {
-      $or: [
-        { senderId: currentUserId, receiverId: targetUserId },
-        { senderId: targetUserId, receiverId: currentUserId },
-      ],
-    };
+      if (cutoffDate) {
+        query.timestamp = { $gte: cutoffDate };
+      }
 
-    if (cutoffDate) {
-      query.timestamp = { $gte: cutoffDate };
-    }
+      const messages = await Message.find(query)
+        .sort({ timestamp: 1 })
+        .limit(MAX_CHAT_MESSAGES);
 
-    const messages = await Message.find(query)
-      .sort({ timestamp: 1 })
-      .limit(MAX_CHAT_MESSAGES);
-
-    return res.status(200).json({
-      messages: messages.map((m) => {
+      finalMessages = messages.map((m) => {
         const json = m.toJSON();
         return {
           ...json,
@@ -96,8 +101,15 @@ const getChatHistory = async (req, res, next) => {
           content: decryptServerMessage(json.content),
           reactions: json.reactions || [],
         };
-      }),
-    });
+      });
+    }
+
+    // Cache in Redis for instant subsequent opens (TTL 300s)
+    if (userSettings.saveChatHistory !== false) {
+      await cacheService.setMessagesCache(currentUserId, targetUserId, finalMessages, 300);
+    }
+
+    return res.status(200).json({ messages: finalMessages });
   } catch (error) {
     next(error);
   }
@@ -141,6 +153,9 @@ const markMessagesAsRead = async (req, res, next) => {
         readerId: String(currentUserId),
       });
     } catch (e) {}
+
+    // Invalidate message and friend list caches
+    await cacheService.invalidateDirectMessages(currentUserId, senderId);
 
     return res.status(200).json({
       success: true,
@@ -236,6 +251,9 @@ const sendMessage = async (req, res, next) => {
       getIO().to(`user:${String(currentUserId)}`).emit('message:receive', messageJSON);
       getIO().to(`user:${String(currentUserId)}`).emit('message:sent-sync', messageJSON);
     } catch (e) {}
+
+    // Invalidate Redis cache for both participants
+    await cacheService.invalidateDirectMessages(currentUserId, receiverId);
 
     return res.status(201).json({
       message: {

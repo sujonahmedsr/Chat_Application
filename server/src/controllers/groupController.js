@@ -3,6 +3,7 @@ const Message = require('../models/Message');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 const { decryptServerMessage } = require('../utils/encryption');
 const { getIO } = require('../sockets/socketManager');
+const cacheService = require('../services/cacheService');
 
 const MAX_GROUP_MESSAGES = 300;
 
@@ -68,6 +69,13 @@ const createGroup = async (req, res, next) => {
 const getUserGroups = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
+
+    // Fast Redis cache check
+    const cachedGroups = await cacheService.getUserGroupsCache(currentUserId);
+    if (cachedGroups && Array.isArray(cachedGroups)) {
+      return res.status(200).json({ groups: cachedGroups });
+    }
+
     const isSuperAdmin = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
     const query = isSuperAdmin ? {} : { members: currentUserId };
 
@@ -79,9 +87,12 @@ const getUserGroups = async (req, res, next) => {
 
     const enrichedGroups = await Promise.all(
       groups.map(async (grp) => {
-        const lastMessage = await Message.findOne({ groupId: grp._id })
-          .populate('senderId', 'name avatar')
-          .sort({ timestamp: -1 });
+        let lastMessage = grp.lastMessage;
+        if (!lastMessage) {
+          lastMessage = await Message.findOne({ groupId: grp._id })
+            .populate('senderId', 'name avatar')
+            .sort({ timestamp: -1 });
+        }
 
         const grpJson = grp.toJSON();
         const creatorId = String(grp.creator?._id || grp.creator?.id || grp.creator || '');
@@ -92,18 +103,25 @@ const getUserGroups = async (req, res, next) => {
           grpJson.admins = [...(grpJson.admins || []), grpJson.creator || creatorId];
         }
 
+        let formattedLastMessage = null;
+        if (lastMessage) {
+          const lm = lastMessage.toJSON ? lastMessage.toJSON() : { ...lastMessage };
+          formattedLastMessage = {
+            ...lm,
+            content: decryptServerMessage(lm.content),
+            sender: lm.senderId || lm.sender,
+          };
+        }
+
         return {
           ...grpJson,
-          lastMessage: lastMessage
-            ? {
-                ...lastMessage.toJSON(),
-                content: decryptServerMessage(lastMessage.content),
-                sender: lastMessage.senderId,
-              }
-            : null,
+          lastMessage: formattedLastMessage,
         };
       })
     );
+
+    // Cache in Redis (TTL 300s)
+    await cacheService.setUserGroupsCache(currentUserId, enrichedGroups, 300);
 
     return res.status(200).json({ groups: enrichedGroups });
   } catch (error) {
@@ -115,33 +133,36 @@ const getGroupMessages = async (req, res, next) => {
   try {
     const { groupId } = req.params;
 
+    // Fast Redis cache check
+    const cachedMessages = await cacheService.getGroupMessagesCache(groupId);
+    if (cachedMessages && Array.isArray(cachedMessages)) {
+      return res.status(200).json({ messages: cachedMessages });
+    }
+
+    let resultMessages = [];
     const group = await Group.findById(groupId).populate('messages.senderId', 'name email avatar');
     if (group && group.messages && group.messages.length > 0) {
       let msgs = group.messages;
       if (msgs.length > MAX_GROUP_MESSAGES) {
         msgs = msgs.slice(-MAX_GROUP_MESSAGES);
       }
-      return res.status(200).json({
-        messages: msgs.map((m) => {
-          const json = m.toJSON ? m.toJSON() : m;
-          return {
-            ...json,
-            id: String(json._id || json.id),
-            content: decryptServerMessage(json.content),
-            reactions: json.reactions || [],
-            sender: m.senderId,
-          };
-        }),
+      resultMessages = msgs.map((m) => {
+        const json = m.toJSON ? m.toJSON() : m;
+        return {
+          ...json,
+          id: String(json._id || json.id),
+          content: decryptServerMessage(json.content),
+          reactions: json.reactions || [],
+          sender: m.senderId,
+        };
       });
-    }
+    } else {
+      const messages = await Message.find({ groupId })
+        .populate('senderId', 'name email avatar')
+        .sort({ timestamp: 1 })
+        .limit(MAX_GROUP_MESSAGES);
 
-    const messages = await Message.find({ groupId })
-      .populate('senderId', 'name email avatar')
-      .sort({ timestamp: 1 })
-      .limit(MAX_GROUP_MESSAGES);
-
-    return res.status(200).json({
-      messages: messages.map((m) => {
+      resultMessages = messages.map((m) => {
         const json = m.toJSON();
         return {
           ...json,
@@ -150,9 +171,17 @@ const getGroupMessages = async (req, res, next) => {
           reactions: json.reactions || [],
           sender: m.senderId,
         };
-      }),
-    });
+      });
+    }
+
+    // Cache messages in Redis (TTL 300s)
+    await cacheService.setGroupMessagesCache(groupId, resultMessages, 300);
+
+    return res.status(200).json({ messages: resultMessages });
   } catch (error) {
+    next(error);
+  }
+};
     next(error);
   }
 };
