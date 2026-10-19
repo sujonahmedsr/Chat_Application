@@ -243,7 +243,7 @@ const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
     .email-container {
       max-width: 580px !important;
       width: 100% !important;
-      margin: 0 auto !important;
+      margin: 40px auto !important;
       table-layout: fixed !important;
       word-break: break-word !important;
       overflow-wrap: break-word !important;
