@@ -285,10 +285,14 @@ const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
             <td align="center" class="header-padding" style="padding: 32px 28px 20px 28px; background-color: #ffffff; border-bottom: 1px solid #f1f5f9; text-align: center;">
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                 <tr>
-                  <td align="center" style="vertical-align: middle;">
-                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; text-align: center; color: #ffffff; font-size: 22px; font-weight: bold;display: flex;align-items: center;justify-content: center; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
-                      &#128172;
-                    </div>
+                  <td align="center" style="vertical-align: middle; padding: 0;">
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="48" height="48" style="width: 48px; height: 48px; margin: 0 auto; background-color: #059669; border-radius: 12px; border-collapse: separate; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);">
+                      <tr>
+                        <td align="center" valign="middle" style="width: 48px; height: 48px; text-align: center; vertical-align: middle; padding: 0; font-size: 24px; line-height: 48px; mso-line-height-rule: exactly;">
+                          &#128172;
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
                 <tr>
@@ -355,8 +359,17 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
     <!-- Account Details Card -->
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 20px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; table-layout: fixed;">
       <tr>
-        <td style="padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
-          <strong style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a;">&#128100; Account Credentials &amp; Status</strong>
+        <td style="padding: 12px 18px; border-bottom: 1px solid #e2e8f0; background-color: #f1f5f9;">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td style="width: 24px; vertical-align: middle; font-size: 16px; line-height: 1;">
+                &#128100;
+              </td>
+              <td style="vertical-align: middle;">
+                <strong style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: #0f172a;">Account Credentials &amp; Status</strong>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
       <tr>
@@ -393,61 +406,85 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
         What you can do right now:
       </h3>
 
-      <!-- Feature item 1 -->
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <!-- Feature item 1: Realtime Messaging -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="padding: 12px 14px; vertical-align: top; width: 34px;">
-            <div style="font-size: 18px;">&#9889;</div>
+          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 9px; border-collapse: separate; text-align: center;">
+              <tr>
+                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                  &#128172;
+                </td>
+              </tr>
+            </table>
           </td>
-          <td style="padding: 12px 14px 12px 0; vertical-align: top;">
+          <td style="padding: 12px 14px 12px 12px; vertical-align: middle;">
             <strong style="color: #0f172a; font-size: 14px; display: block;">Ultra-Fast Realtime Messaging</strong>
-            <span style="color: #475569; font-size: 13px; line-height: 1.4; display: block; margin-top: 2px;">
-              Redis-powered in-memory pub/sub synchronization delivering instant, sub-millisecond messages with typing indicators and read receipts.
+            <span style="color: #475569; font-size: 13px; line-height: 1.45; display: block; margin-top: 2px;">
+              Redis-powered pub/sub message synchronization delivering instant delivery with typing indicators and read receipts.
             </span>
           </td>
         </tr>
       </table>
 
-      <!-- Feature item 2 -->
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <!-- Feature item 2: Encryption -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="padding: 12px 14px; vertical-align: top; width: 34px;">
-            <div style="font-size: 18px;">&#128274;</div>
+          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 9px; border-collapse: separate; text-align: center;">
+              <tr>
+                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                  &#128274;
+                </td>
+              </tr>
+            </table>
           </td>
-          <td style="padding: 12px 14px 12px 0; vertical-align: top;">
+          <td style="padding: 12px 14px 12px 12px; vertical-align: middle;">
             <strong style="color: #0f172a; font-size: 14px; display: block;">End-to-End Client Encryption</strong>
-            <span style="color: #475569; font-size: 13px; line-height: 1.4; display: block; margin-top: 2px;">
+            <span style="color: #475569; font-size: 13px; line-height: 1.45; display: block; margin-top: 2px;">
               Direct messages and shared media files are cryptographically protected in your browser so only you and the recipient can read them.
             </span>
           </td>
         </tr>
       </table>
 
-      <!-- Feature item 3 -->
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <!-- Feature item 3: HD Voice & Video Calling -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="padding: 12px 14px; vertical-align: top; width: 34px;">
-            <div style="font-size: 18px;">&#128222;</div>
+          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 9px; border-collapse: separate; text-align: center;">
+              <tr>
+                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                  &#128249;
+                </td>
+              </tr>
+            </table>
           </td>
-          <td style="padding: 12px 14px 12px 0; vertical-align: top;">
-            <strong style="color: #0f172a; font-size: 14px; display: block;">HD Peer-to-Peer Voice &amp; Video Calls</strong>
-            <span style="color: #475569; font-size: 13px; line-height: 1.4; display: block; margin-top: 2px;">
-              Crystal-clear WebRTC audio and video calling with globally distributed TURN relays for flawless connectivity across any network.
+          <td style="padding: 12px 14px 12px 12px; vertical-align: middle;">
+            <strong style="color: #0f172a; font-size: 14px; display: block;">HD WebRTC Voice &amp; Video Calling</strong>
+            <span style="color: #475569; font-size: 13px; line-height: 1.45; display: block; margin-top: 2px;">
+              Crystal-clear peer-to-peer audio and video calling with globally distributed TURN relays for flawless connectivity across any network.
             </span>
           </td>
         </tr>
       </table>
 
-      <!-- Feature item 4 -->
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <!-- Feature item 4: Group Spaces & Channels -->
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; table-layout: fixed;">
         <tr>
-          <td style="padding: 12px 14px; vertical-align: top; width: 34px;">
-            <div style="font-size: 18px;">&#128101;</div>
+          <td style="width: 52px; vertical-align: middle; padding: 12px 0 12px 14px;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="38" height="38" style="width: 38px; height: 38px; background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 9px; border-collapse: separate; text-align: center;">
+              <tr>
+                <td align="center" valign="middle" style="width: 38px; height: 38px; text-align: center; vertical-align: middle; font-size: 18px; line-height: 38px; padding: 0;">
+                  &#128101;
+                </td>
+              </tr>
+            </table>
           </td>
-          <td style="padding: 12px 14px 12px 0; vertical-align: top;">
-            <strong style="color: #0f172a; font-size: 14px; display: block;">Channels &amp; Voice Messaging</strong>
-            <span style="color: #475569; font-size: 13px; line-height: 1.4; display: block; margin-top: 2px;">
-              Form public or private group channels, record and send audio voice notes, and collaborate effortlessly.
+          <td style="padding: 12px 14px 12px 12px; vertical-align: middle;">
+            <strong style="color: #0f172a; font-size: 14px; display: block;">Group Spaces &amp; Channels</strong>
+            <span style="color: #475569; font-size: 13px; line-height: 1.45; display: block; margin-top: 2px;">
+              Form public or private community groups, share audio voice notes, and collaborate effortlessly.
             </span>
           </td>
         </tr>
@@ -472,10 +509,13 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
     </table>
 
     <!-- Pro Tip Notice Box -->
-    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; table-layout: fixed;">
       <tr>
-        <td style="padding: 12px 16px; font-size: 13px; line-height: 1.5; color: #166534;">
-          <strong style="color: #15803d;">&#128161; Quick Start Tip:</strong>
+        <td style="width: 38px; vertical-align: top; padding: 14px 0 14px 16px; font-size: 18px; line-height: 1;">
+          &#128161;
+        </td>
+        <td style="padding: 13px 16px 13px 8px; font-size: 13px; line-height: 1.5; color: #166534; vertical-align: top;">
+          <strong style="color: #15803d; display: block; margin-bottom: 2px;">Quick Start Tip:</strong>
           You can add friends by searching for their username or email directly from the contacts tab. Once accepted, you can initiate one-click HD calls instantly!
         </td>
       </tr>
@@ -527,6 +567,11 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
               <td style="padding-left: 16px; vertical-align: middle;">
                 <div style="font-weight: 700; color: #0f172a; font-size: 16px;">${fromName}</div>
                 <div style="font-size: 13px; color: #64748b; margin-top: 2px;">${senderEmail || 'Shofi Chat Member'}</div>
+              </td>
+              <td align="right" style="vertical-align: middle;">
+                <span style="display: inline-block; padding: 4px 10px; background-color: #ecfdf5; border: 1px solid #a7f3d0; color: #059669; border-radius: 9999px; font-size: 11px; font-weight: 700;">
+                  INVITATION
+                </span>
               </td>
             </tr>
           </table>
