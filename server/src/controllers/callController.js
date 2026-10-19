@@ -1,13 +1,22 @@
 const CallLog = require('../models/CallLog');
 
-// Google and Cloudflare public STUN servers (always available worldwide)
+// Google and Cloudflare public STUN servers + Metered Global TURN Relay fallback
 const DEFAULT_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  {
+    urls: [
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+    ],
+    username: '21b9764963d38d0b9408466c',
+    credential: 'NLDW6hUUVg3lSPF1',
+  },
 ];
 
 let cachedIceServers = null;
@@ -20,38 +29,50 @@ const getIceServers = async (req, res, next) => {
       return res.status(200).json({ iceServers: cachedIceServers });
     }
 
-    const rawMeteredAppName = process.env.METERED_APP_NAME;
+    const rawMeteredAppName = process.env.METERED_APP_NAME || 'shofichat';
     const meteredApiKey = process.env.METERED_API_KEY;
+    const meteredSecretKey = process.env.METERED_SECRET_KEY || meteredApiKey;
+    const meteredAppName = rawMeteredAppName.replace(/https?:\/\//, '').replace('.metered.live', '').trim();
 
-    if (rawMeteredAppName && meteredApiKey) {
+    let fetchedTurnServers = null;
+
+    // 1. Try direct fetch with credential API Key if available
+    if (meteredApiKey) {
       try {
-        const meteredAppName = rawMeteredAppName.replace(/https?:\/\//, '').replace('.metered.live', '').trim();
-        // Attempt 1: Direct fetch via Credential API Key
-        let fetchUrl = `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`;
-        let response = await fetch(fetchUrl);
-        let meteredServers = response.ok ? await response.json() : null;
+        const v1Res = await fetch(`https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`);
+        if (v1Res.ok) {
+          const v1Data = await v1Res.json();
+          if (Array.isArray(v1Data) && v1Data.length > 0) {
+            fetchedTurnServers = v1Data;
+          }
+        }
+      } catch (e) {
+        console.warn('[CallController] v1 turn/credentials fetch failed:', e.message);
+      }
+    }
 
-        // Attempt 2: If apiKey was a Secret Key (from Developers tab), obtain credential first
-        if (!Array.isArray(meteredServers) || meteredServers.length === 0) {
-          const secretRes = await fetch(
-            `https://${meteredAppName}.metered.live/api/v1/turn/credential?secretKey=${meteredApiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({}),
-            }
-          );
-          if (secretRes.ok) {
-            const credData = await secretRes.json();
-            if (credData.apiKey) {
-              const retryRes = await fetch(
-                `https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${credData.apiKey}`
-              );
-              if (retryRes.ok) {
-                meteredServers = await retryRes.json();
+    // 2. If v1 direct fetch didn't return servers, query v2 with secretKey to list active credentials
+    if (!fetchedTurnServers && meteredSecretKey) {
+      try {
+        const v2Res = await fetch(`https://${meteredAppName}.metered.live/api/v2/turn/credentials?secretKey=${meteredSecretKey}`);
+        if (v2Res.ok) {
+          const v2Data = await v2Res.json();
+          const records = v2Data?.data;
+          if (Array.isArray(records) && records.length > 0) {
+            const activeRecord = records[0];
+            // If the record has an apiKey, fetch the complete server list
+            if (activeRecord.apiKey) {
+              const v1Retry = await fetch(`https://${meteredAppName}.metered.live/api/v1/turn/credentials?apiKey=${activeRecord.apiKey}`);
+              if (v1Retry.ok) {
+                const retryData = await v1Retry.json();
+                if (Array.isArray(retryData) && retryData.length > 0) {
+                  fetchedTurnServers = retryData;
+                }
               }
-            } else if (credData.username && credData.password) {
-              meteredServers = [
+            }
+            // Fallback: manually construct TURN server list from active username & password
+            if (!fetchedTurnServers && activeRecord.username && activeRecord.password) {
+              fetchedTurnServers = [
                 { urls: 'stun:stun.relay.metered.ca:80' },
                 {
                   urls: [
@@ -60,35 +81,44 @@ const getIceServers = async (req, res, next) => {
                     'turn:global.relay.metered.ca:443',
                     'turns:global.relay.metered.ca:443?transport=tcp',
                   ],
-                  username: credData.username,
-                  credential: credData.password,
+                  username: activeRecord.username,
+                  credential: activeRecord.password,
                 },
               ];
             }
           }
         }
-
-        if (Array.isArray(meteredServers) && meteredServers.length > 0) {
-          cachedIceServers = [...DEFAULT_ICE_SERVERS, ...meteredServers];
-          cacheExpiry = now + 1000 * 60 * 30; // 30 minutes in-memory cache
-          return res.status(200).json({ iceServers: cachedIceServers });
-        }
-      } catch (err) {
-        console.warn('[CallController] Failed to fetch Metered TURN credentials:', err.message);
+      } catch (e) {
+        console.warn('[CallController] v2 turn/credentials list query failed:', e.message);
       }
     }
 
-    // Check for custom TURN credentials in environment
-    if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
-      const customTurn = {
-        urls: process.env.TURN_URL.split(',').map((u) => u.trim()),
-        username: process.env.TURN_USERNAME,
-        credential: process.env.TURN_CREDENTIAL,
-      };
-      return res.status(200).json({ iceServers: [...DEFAULT_ICE_SERVERS, customTurn] });
+    // 3. Custom TURN credentials from environment
+    if (!fetchedTurnServers && process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+      fetchedTurnServers = [
+        {
+          urls: process.env.TURN_URL.split(',').map((u) => u.trim()),
+          username: process.env.TURN_USERNAME,
+          credential: process.env.TURN_CREDENTIAL,
+        },
+      ];
     }
 
-    return res.status(200).json({ iceServers: DEFAULT_ICE_SERVERS });
+    // Combine standard STUN with resolved TURN servers (or use guaranteed DEFAULT_ICE_SERVERS)
+    const baseStuns = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+    ];
+
+    if (fetchedTurnServers && fetchedTurnServers.length > 0) {
+      cachedIceServers = [...baseStuns, ...fetchedTurnServers];
+    } else {
+      cachedIceServers = DEFAULT_ICE_SERVERS;
+    }
+
+    cacheExpiry = now + 1000 * 60 * 30; // 30 minutes in-memory cache
+    return res.status(200).json({ iceServers: cachedIceServers });
   } catch (error) {
     next(error);
   }

@@ -4,9 +4,18 @@ export const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
   { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  {
+    urls: [
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+    ],
+    username: '21b9764963d38d0b9408466c',
+    credential: 'NLDW6hUUVg3lSPF1',
+  },
 ];
 
 let cachedRtcConfig: RTCConfiguration | null = null;
@@ -46,8 +55,8 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
   }
 
   // 2. Direct client-side Metered.ca fallback if configured in client env
-  const rawClientAppName = process.env.NEXT_PUBLIC_METERED_APP_NAME;
-  const clientApiKey = process.env.NEXT_PUBLIC_METERED_API_KEY;
+  const rawClientAppName = process.env.NEXT_PUBLIC_METERED_APP_NAME || 'shofichat';
+  const clientApiKey = process.env.NEXT_PUBLIC_METERED_API_KEY || '1afbb21d235cd12b75a352da55aa5b893380';
 
   if (rawClientAppName && clientApiKey) {
     try {
@@ -58,24 +67,14 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
       let meteredServers = res.ok ? await res.json() : null;
 
       if (!Array.isArray(meteredServers) || meteredServers.length === 0) {
-        const secretRes = await fetch(
-          `https://${clientAppName}.metered.live/api/v1/turn/credential?secretKey=${clientApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          }
+        // Try v2 with secretKey
+        const v2Res = await fetch(
+          `https://${clientAppName}.metered.live/api/v2/turn/credentials?secretKey=${clientApiKey}`
         );
-        if (secretRes.ok) {
-          const credData = await secretRes.json();
-          if (credData.apiKey) {
-            const retry = await fetch(
-              `https://${clientAppName}.metered.live/api/v1/turn/credentials?apiKey=${credData.apiKey}`
-            );
-            if (retry.ok) {
-              meteredServers = await retry.json();
-            }
-          } else if (credData.username && credData.password) {
+        if (v2Res.ok) {
+          const v2Data = await v2Res.json();
+          const records = v2Data?.data;
+          if (Array.isArray(records) && records.length > 0 && records[0].username && records[0].password) {
             meteredServers = [
               { urls: 'stun:stun.relay.metered.ca:80' },
               {
@@ -85,8 +84,8 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
                   'turn:global.relay.metered.ca:443',
                   'turns:global.relay.metered.ca:443?transport=tcp',
                 ],
-                username: credData.username,
-                credential: credData.password,
+                username: records[0].username,
+                credential: records[0].password,
               },
             ];
           }
@@ -94,8 +93,13 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
       }
 
       if (Array.isArray(meteredServers) && meteredServers.length > 0) {
+        const baseStuns = [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
+        ];
         cachedRtcConfig = {
-          iceServers: [...DEFAULT_ICE_SERVERS, ...meteredServers],
+          iceServers: [...baseStuns, ...meteredServers],
           iceCandidatePoolSize: 10,
         };
         cacheTimestamp = now;
@@ -106,7 +110,7 @@ export const getWebRtcConfiguration = async (): Promise<RTCConfiguration> => {
     }
   }
 
-  // 3. Fallback to reliable Google & Cloudflare STUN servers
+  // 3. Fallback to guaranteed STUN + Metered TURN servers
   cachedRtcConfig = {
     iceServers: DEFAULT_ICE_SERVERS,
     iceCandidatePoolSize: 10,

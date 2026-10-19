@@ -29,3 +29,6 @@ yarn-error.log*
 *.pem
 .vscode/
 .idea/
+
+# Local tests (hidden from GitHub, kept locally)
+server/test/
