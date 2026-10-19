@@ -73,7 +73,7 @@ export const LandingPage: React.FC = () => {
         return;
       }
 
-      setError('গুগল লগইন চালু করতে server/.env ফাইলে GOOGLE_CLIENT_ID এবং GOOGLE_CLIENT_SECRET দিন।');
+      setError('Google sign-in is not configured yet. Please ensure GOOGLE_CLIENT_ID is set in your environment.');
     } catch (err: any) {
       setError(err.message || 'Failed to initiate Google sign-in');
     } finally {
@@ -84,48 +84,48 @@ export const LandingPage: React.FC = () => {
   const features = [
     {
       icon: Zap,
-      title: 'আল্ট্রা-ফাস্ট রিয়েলটাইম মেসেজিং',
-      desc: 'Redis হাই-স্পিড ক্যাশিং আর্কিটেকচার দ্বারা চালিত—০ms ল্যাটেঞ্চিতে তৎক্ষণাৎ মেসেজ ডেলিভারি।',
+      title: 'Ultra-Fast Realtime Messaging',
+      desc: 'Powered by high-speed Redis caching architecture — sub-millisecond instant message delivery with zero perceptible delay.',
       gradient: 'from-amber-500/20 to-orange-500/10',
       iconColor: 'text-amber-400',
       borderColor: 'border-amber-500/20',
     },
     {
       icon: Lock,
-      title: 'এন্ড-টু-এন্ড এনক্রিপশন (E2EE)',
-      desc: 'আপনার সকল ব্যক্তিগত চ্যাট সম্পূর্ণ ক্লায়েন্ট-সাইডে এনক্রিপ্টেড। আপনার গোপনীয়তা শতভাগ নিশ্চিত।',
+      title: 'End-to-End Encryption (E2EE)',
+      desc: 'All direct messages and private conversations are cryptographically protected client-side. Your personal privacy is guaranteed.',
       gradient: 'from-emerald-500/20 to-teal-500/10',
       iconColor: 'text-emerald-400',
       borderColor: 'border-emerald-500/20',
     },
     {
       icon: PhoneCall,
-      title: 'এইচডি ভয়েস ও ভিডিও কলিং',
-      desc: 'WebRTC ও Metered TURN রিলের মাধ্যমে মোবাইল ৪জি/৫জি ও ব্রডব্যান্ডে ক্রিস্টাল-ক্লিয়ার অডিও-ভিডিও কল।',
+      title: 'HD WebRTC Voice & Video Calling',
+      desc: 'Crystal-clear peer-to-peer calling with Metered global TURN relays optimized for 4G, 5G, and restricted NAT firewalls.',
       gradient: 'from-blue-500/20 to-cyan-500/10',
       iconColor: 'text-blue-400',
       borderColor: 'border-blue-500/20',
     },
     {
       icon: Users,
-      title: 'গ্রুপ চ্যানেল ও অডিও কনফারেন্স',
-      desc: 'আনলিমিটেড মেম্বারদের সাথে গ্রুপ চ্যাট তৈরি করুন এবং একসাথে একাধিক বন্ধুদের সাথে কথা বলুন।',
+      title: 'Group Spaces & Channels',
+      desc: 'Create vibrant communities with unlimited members, share multimedia, collaborate effortlessly, and connect with multiple friends.',
       gradient: 'from-purple-500/20 to-indigo-500/10',
       iconColor: 'text-purple-400',
       borderColor: 'border-purple-500/20',
     },
     {
       icon: Bell,
-      title: 'স্মার্ট ইমেইল ও পুশ নোটিফিকেশন',
-      desc: 'অ্যাকাউন্ট তৈরি বা নতুন ফ্রেন্ড রিকোয়েস্ট আসলেই তাৎক্ষণিক ইমেইল নোটিফিকেশন পৌঁছে যাবে।',
+      title: 'Smart Transactional Email Alerts',
+      desc: 'Instant, beautifully styled email notifications triggered on account onboarding and incoming friend invitations.',
       gradient: 'from-rose-500/20 to-pink-500/10',
       iconColor: 'text-rose-400',
       borderColor: 'border-rose-500/20',
     },
     {
       icon: Share2,
-      title: 'ইনস্ট্যান্ট মিডিয়া ও ফাইল শেয়ারিং',
-      desc: 'ছবি, অডিও ভয়েস নোট ও প্রয়োজনীয় ফাইল সেকেন্ডের মধ্যে চ্যাটে নিরাপদভাবে শেয়ার করুন।',
+      title: 'Instant Media & Voice Notes',
+      desc: 'Send high-res photos, cloud-backed voice recordings, and important files seamlessly within conversational streams.',
       gradient: 'from-teal-500/20 to-emerald-500/10',
       iconColor: 'text-teal-400',
       borderColor: 'border-teal-500/20',
@@ -141,7 +141,7 @@ export const LandingPage: React.FC = () => {
       </div>
 
       {/* ======================================================== */}
-      {/* LEFT SIDE: App Advantages & Value Proposition (সুবিধাসমূহ) */}
+      {/* LEFT SIDE: App Advantages & Value Proposition             */}
       {/* ======================================================== */}
       <div className="w-full lg:w-[58%] min-h-screen p-6 sm:p-10 lg:p-16 flex flex-col justify-between relative z-10 border-b lg:border-b-0 lg:border-r border-neutral-800/80 bg-neutral-950/40 backdrop-blur-sm">
         {/* Top Branding */}
@@ -166,16 +166,16 @@ export const LandingPage: React.FC = () => {
           <div className="max-w-xl mb-10">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-xs text-neutral-300 font-medium mb-4 shadow-inner">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>নিরাপদ, স্মার্ট ও বিদ্যুৎগতির চ্যাট প্ল্যাটফর্ম</span>
+              <span>Secure, Intelligent & Lightning-Fast Communication</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.15]">
-              যোগাযোগ হোক{' '}
+              Connect Instantly with{' '}
               <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                সীমাহীন, সহজ ও সুপার-ফাস্ট
+                Boundless Speed & Privacy
               </span>
             </h1>
             <p className="mt-4 text-sm sm:text-base text-neutral-400 leading-relaxed max-w-lg">
-              কোনো প্রকার ল্যাগ ছাড়াই বন্ধুদের সাথে সরাসরি চ্যাট, এইচডি ভয়েস/ভিডিও কল এবং গ্রুপ আড্ডা দিন একই প্ল্যাটফর্মে।
+              Experience zero-lag real-time messaging, crystal-clear HD voice & video calls, and dynamic group spaces — all in one unified, sleek dashboard.
             </p>
           </div>
 
@@ -209,15 +209,15 @@ export const LandingPage: React.FC = () => {
         <div className="mt-10 pt-6 border-t border-neutral-800/60 flex flex-wrap items-center gap-6 text-xs text-neutral-400">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span>১০০% ফ্রি ও উন্মুক্ত</span>
+            <span>100% Free & Open Access</span>
           </div>
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-teal-400 flex-shrink-0" />
-            <span>২৫৬-বিট SSL এনক্রিপশন</span>
+            <span>256-Bit Cryptographic Security</span>
           </div>
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <span>Redis জিরো-ল্যাগ পারফরম্যান্স</span>
+            <span>Redis Zero-Lag Sync</span>
           </div>
         </div>
       </div>
@@ -239,7 +239,7 @@ export const LandingPage: React.FC = () => {
               Welcome to Shofi Chat
             </h2>
             <p className="text-xs sm:text-sm text-neutral-400 mt-2 leading-relaxed">
-              এক ক্লিকে আপনার গুগল অ্যাকাউন্ট দিয়ে সরাসরি যুক্ত হোন। কোনো বাড়তি পাসওয়ার্ডের ঝামেলা নেই।
+              Sign in seamlessly with your Google Account in one click. No password hassle required.
             </p>
           </div>
 
@@ -291,13 +291,13 @@ export const LandingPage: React.FC = () => {
             {/* Security Indicator */}
             <div className="pt-2 flex items-center justify-center gap-1.5 text-xs text-neutral-400 text-center">
               <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>Direct Google OAuth 2.0 Security • Auto profile sync</span>
+              <span>Direct Google OAuth 2.0 Security • Instant Auto-Sync</span>
             </div>
           </div>
 
           {/* Privacy Note */}
           <div className="mt-8 pt-6 border-t border-neutral-800 text-center text-[11px] text-neutral-400">
-            লগইন করার মাধ্যমে আপনি আমাদের নীতি ও শর্তাবলীতে সম্মত হচ্ছেন। আপনার প্রোফাইল সম্পূর্ণ সুরক্ষিত।
+            By continuing, you agree to our Terms of Service & Privacy Policy. Your credentials remain safe & secure.
           </div>
         </div>
       </div>

@@ -67,7 +67,7 @@ const getTransporter = () => {
 
 
 /**
- * Base email wrapper with responsive HTML styling
+ * Base email wrapper with responsive HTML styling (Stripe / Linear caliber)
  */
 const renderEmailLayout = ({ title, preheader, contentHtml }) => {
   const currentClient = (CLIENT_URL || 'https://shofichat.vercel.app').split(',')[0].trim();
@@ -78,110 +78,162 @@ const renderEmailLayout = ({ title, preheader, contentHtml }) => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>${title}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td { font-family: Helvetica, Arial, sans-serif !important; }
+  </style>
+  <![endif]-->
   <style>
     body {
       margin: 0;
       padding: 0;
-      background-color: #0a0a0a;
+      background-color: #09090b;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #e5e5e5;
+      color: #f4f4f5;
+      -webkit-font-smoothing: antialiased;
     }
     .wrapper {
-      width: 100%;
-      background-color: #0a0a0a;
-      padding: 40px 16px;
+      width: 100% !important;
+      background-color: #09090b;
+      padding: 48px 16px;
     }
     .container {
-      max-width: 580px;
+      max-width: 560px;
       margin: 0 auto;
-      background: #141414;
-      border: 1px solid #262626;
-      border-radius: 24px;
+      background: #121215;
+      border: 1px solid #27272a;
+      border-radius: 20px;
       overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
     }
     .header {
-      padding: 32px 32px 24px 32px;
+      padding: 36px 36px 28px 36px;
       text-align: center;
-      background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(20, 20, 20, 0) 100%);
-      border-bottom: 1px solid #262626;
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.12) 0%, rgba(18, 18, 21, 0) 100%);
+      border-bottom: 1px solid #202024;
     }
     .logo-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-block;
       width: 52px;
       height: 52px;
-      background: linear-gradient(135deg, #059669 0%, #14b8a6 100%);
-      border-radius: 16px;
-      margin-bottom: 12px;
+      line-height: 52px;
+      background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+      border-radius: 14px;
+      text-align: center;
       font-size: 26px;
       color: #ffffff;
-      box-shadow: 0 8px 16px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+      margin-bottom: 14px;
     }
     .brand-title {
       font-size: 22px;
-      font-weight: 700;
+      font-weight: 800;
       color: #ffffff;
-      margin: 0;
+      margin: 0 0 4px 0;
       letter-spacing: -0.5px;
     }
+    .brand-subtitle {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin: 0;
+    }
     .content {
-      padding: 32px;
-      line-height: 1.6;
+      padding: 36px;
+      line-height: 1.65;
       font-size: 15px;
-      color: #a3a3a3;
+      color: #d4d4d8;
     }
     .content h2 {
-      color: #f5f5f5;
-      font-size: 20px;
-      font-weight: 600;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
       margin-top: 0;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      letter-spacing: -0.3px;
     }
     .btn {
       display: inline-block;
-      padding: 14px 28px;
-      background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+      padding: 14px 32px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: #ffffff !important;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       text-decoration: none;
       border-radius: 12px;
-      margin: 24px 0 16px 0;
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      margin: 28px 0 16px 0;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+      letter-spacing: 0.2px;
+    }
+    .feature-grid {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 14px;
+      padding: 20px;
+      margin: 24px 0;
+    }
+    .feature-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #222226;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .feature-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .feature-item:first-child {
+      padding-top: 0;
     }
     .card-box {
-      background: #1c1c1c;
-      border: 1px solid #2e2e2e;
-      border-radius: 16px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 14px;
       padding: 20px;
-      margin: 20px 0;
+      margin: 22px 0;
     }
     .footer {
-      padding: 24px 32px;
+      padding: 26px 36px;
       text-align: center;
       font-size: 12px;
-      color: #737373;
-      border-top: 1px solid #262626;
-      background: #0d0d0d;
+      color: #71717a;
+      border-top: 1px solid #202024;
+      background: #0d0d10;
+    }
+    .footer a {
+      color: #10b981;
+      text-decoration: none;
+    }
+    .preheader-text {
+      display: none !important;
+      visibility: hidden;
+      mso-hide: all;
+      font-size: 1px;
+      line-height: 1px;
+      max-height: 0;
+      max-width: 0;
+      opacity: 0;
+      overflow: hidden;
     }
   </style>
 </head>
 <body>
+  <span class="preheader-text">${preheader || title}</span>
   <div class="wrapper">
     <div class="container">
       <div class="header">
         <div class="logo-badge">💬</div>
         <h1 class="brand-title">Shofi Chat</h1>
+        <p class="brand-subtitle">Realtime Communication Platform</p>
       </div>
       <div class="content">
         ${contentHtml}
       </div>
       <div class="footer">
-        <p style="margin: 0 0 6px 0;">This email was sent by <strong>Shofi Chat</strong> realtime communication system.</p>
-        <p style="margin: 0;">Visit your dashboard at <a href="${currentClient}" style="color: #10b981; text-decoration: none;">${currentClient}</a></p>
+        <p style="margin: 0 0 6px 0;">This email was sent by <strong>Shofi Chat</strong> realtime messaging network.</p>
+        <p style="margin: 0;">Access your live dashboard at <a href="${currentClient}">${currentClient}</a></p>
       </div>
     </div>
   </div>
@@ -206,21 +258,54 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
   const displayName = name || to.split('@')[0];
 
   const contentHtml = `
-    <h2>Welcome to Shofi Chat, ${displayName}! 🎉</h2>
-    <p>Your account has been created successfully. You're all set to experience lightning-fast, secure realtime messaging, voice and video calling.</p>
+    <h2>Welcome to Shofi Chat, ${displayName}! 👋</h2>
+    <p style="margin-top: 0; color: #a1a1aa; font-size: 15px;">
+      Your account is now active and ready. Experience lightning-fast, cryptographically secured realtime communication.
+    </p>
     
-    <div class="card-box">
-      <h3 style="color: #10b981; font-size: 15px; margin: 0 0 10px 0;">🚀 What you can do with Shofi Chat:</h3>
-      <ul style="margin: 0; padding-left: 20px; color: #d4d4d4; font-size: 14px;">
-        <li style="margin-bottom: 6px;"><strong>Ultra-Fast Realtime Messaging:</strong> Redis-accelerated instant chat synchronization.</li>
-        <li style="margin-bottom: 6px;"><strong>End-to-End Encryption:</strong> Client-side cryptographic protection for privacy.</li>
-        <li style="margin-bottom: 6px;"><strong>HD WebRTC Voice & Video:</strong> Crystal-clear peer-to-peer calling with TURN relay.</li>
-        <li style="margin-bottom: 0;"><strong>Group Channels:</strong> Create multi-member rooms and voice conferences.</li>
-      </ul>
+    <div class="feature-grid">
+      <div style="font-weight: 700; color: #10b981; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">
+        ⚡ Key Features Overview
+      </div>
+      
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #ffffff;">⚡ Ultra-Fast Messaging:</strong>
+        <span style="color: #a1a1aa; display: block; font-size: 13px; margin-top: 2px;">
+          Redis-powered in-memory synchronization delivering instant, sub-millisecond chat delivery.
+        </span>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #ffffff;">🔒 End-to-End Encryption:</strong>
+        <span style="color: #a1a1aa; display: block; font-size: 13px; margin-top: 2px;">
+          Direct messages and media are cryptographically shielded client-side for maximum confidentiality.
+        </span>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <strong style="color: #ffffff;">📞 HD WebRTC Audio & Video:</strong>
+        <span style="color: #a1a1aa; display: block; font-size: 13px; margin-top: 2px;">
+          Crystal-clear peer-to-peer calling with Metered global TURN relay across mobile networks.
+        </span>
+      </div>
+
+      <div>
+        <strong style="color: #ffffff;">👥 Group Channels:</strong>
+        <span style="color: #a1a1aa; display: block; font-size: 13px; margin-top: 2px;">
+          Build collaborative group channels, share multimedia voice notes, and host live audio calls.
+        </span>
+      </div>
     </div>
 
-    <div style="text-align: center;">
-      <a href="${clientUrl}" class="btn">Open Shofi Chat Dashboard →</a>
+    <div style="text-align: center; margin: 30px 0 10px 0;">
+      <a href="${clientUrl}" class="btn">Launch Shofi Chat Dashboard →</a>
+    </div>
+
+    <div style="background: #141416; border: 1px dashed #27272a; border-radius: 12px; padding: 14px 18px; margin-top: 24px; text-align: left;">
+      <span style="color: #10b981; font-weight: 600; font-size: 13px;">💡 Pro Tip:</span>
+      <span style="color: #a1a1aa; font-size: 13px; display: block; margin-top: 3px;">
+        Invite your team or friends by sharing the direct platform link. You can start voice calls or search contacts instantly!
+      </span>
     </div>
   `;
 
@@ -230,8 +315,8 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
       to,
       subject: `Welcome to Shofi Chat, ${displayName}! 🚀`,
       html: renderEmailLayout({
-        title: 'Welcome to Shofi Chat',
-        preheader: 'Your account has been created successfully.',
+        title: `Welcome to Shofi Chat, ${displayName}`,
+        preheader: `Your Shofi Chat account is ready. Start ultra-fast messaging and HD calls now!`,
         contentHtml,
       }),
     });
@@ -258,24 +343,33 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
   const recName = recipientName || to.split('@')[0];
 
   const contentHtml = `
-    <h2>New Friend Request 🤝</h2>
-    <p>Hi ${recName},</p>
-    <p><strong>${fromName}</strong> sent you a friend request on Shofi Chat!</p>
+    <h2>New Friend Invitation 🤝</h2>
+    <p style="margin-top: 0; color: #a1a1aa; font-size: 15px;">
+      Hi ${recName}, you have received a new connection request on Shofi Chat.
+    </p>
 
-    <div class="card-box" style="display: flex; align-items: center; gap: 16px;">
-      <div style="width: 50px; height: 50px; border-radius: 50%; overflow: hidden; background: #262626; flex-shrink: 0; border: 2px solid #10b981;">
-        <img src="${senderAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fromName)}`}" alt="${fromName}" style="width: 100%; height: 100%; object-fit: cover;" />
-      </div>
-      <div>
-        <div style="font-weight: 600; color: #ffffff; font-size: 16px;">${fromName}</div>
-        <div style="font-size: 13px; color: #737373;">${senderEmail || 'Shofi Chat Member'}</div>
-      </div>
+    <div class="card-box" style="text-align: left;">
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%;">
+        <tr>
+          <td style="width: 54px; vertical-align: middle;">
+            <div style="width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: #27272a; border: 2px solid #10b981;">
+              <img src="${senderAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fromName)}`}" alt="${fromName}" style="width: 100%; height: 100%; display: block; object-fit: cover;" />
+            </div>
+          </td>
+          <td style="padding-left: 14px; vertical-align: middle;">
+            <div style="font-weight: 700; color: #ffffff; font-size: 16px;">${fromName}</div>
+            <div style="font-size: 13px; color: #a1a1aa; margin-top: 2px;">${senderEmail || 'Shofi Chat Member'}</div>
+          </td>
+        </tr>
+      </table>
     </div>
 
-    <p>Connect and start chatting with instant end-to-end encrypted messaging, voice calls, and video chat.</p>
+    <p style="color: #a1a1aa; font-size: 14px;">
+      Accepting this invitation will allow you and <strong>${fromName}</strong> to start instant encrypted messaging, share media, and start HD voice/video calls.
+    </p>
 
-    <div style="text-align: center;">
-      <a href="${clientUrl}" class="btn">View & Accept Request →</a>
+    <div style="text-align: center; margin: 30px 0 10px 0;">
+      <a href="${clientUrl}" class="btn">View & Accept Invitation →</a>
     </div>
   `;
 
@@ -286,7 +380,7 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
       subject: `💬 ${fromName} sent you a friend request on Shofi Chat`,
       html: renderEmailLayout({
         title: 'New Friend Request on Shofi Chat',
-        preheader: `${fromName} sent you a friend request`,
+        preheader: `${fromName} wants to connect with you on Shofi Chat`,
         contentHtml,
       }),
     });
