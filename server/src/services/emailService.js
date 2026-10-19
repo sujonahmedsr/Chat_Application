@@ -69,7 +69,34 @@ const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
   const currentClient = getLiveClientUrl();
   const finalHtml = renderEmailLayout({ title, preheader, contentHtml: html });
 
-  // 1. Resend HTTPS API (Port 443 - 100% unblocked on Render Free tier)
+  // 1. Vercel HTTPS Serverless Relay (Port 443 - sends via Gmail to ANY recipient with zero domain or SMTP port blocks)
+  const relayUrl = `${currentClient.replace(/\/+$/, '')}/api/send-email`;
+  const isCloudEnv = process.env.NODE_ENV === 'production' || !currentClient.includes('localhost');
+  if (isCloudEnv && relayUrl.startsWith('https://')) {
+    try {
+      console.log(`[EmailService] Attempting delivery via Vercel HTTPS relay (${relayUrl})...`);
+      const resp = await fetch(relayUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          subject,
+          html: finalHtml,
+          secret: 'chat_app_email_relay',
+        }),
+      });
+      const data = await resp.json();
+      if (resp.ok && data?.success) {
+        console.log(`[EmailService] Email sent via Vercel Relay to ${to} (MessageId: ${data.messageId})`);
+        return { success: true, messageId: data.messageId, provider: 'vercel-relay' };
+      }
+      console.warn('[EmailService] Vercel relay returned error, falling back:', data?.error || resp.statusText);
+    } catch (relayErr) {
+      console.warn('[EmailService] Vercel relay unreachable, falling back:', relayErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API (Port 443 - 100% unblocked on Render Free tier)
   const resendKey = process.env.RESEND_API_KEY;
   if (resendKey) {
     try {
