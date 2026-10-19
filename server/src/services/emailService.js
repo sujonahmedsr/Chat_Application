@@ -9,55 +9,47 @@ const {
   CLIENT_URL,
 } = require('../config/config');
 
+const getLiveClientUrl = () => {
+  const envUrl = process.env.CLIENT_URL || CLIENT_URL || 'https://shofichat.vercel.app';
+  const urls = envUrl.split(',').map((u) => u.trim());
+  const prod = urls.find((u) => u.includes('vercel.app') || u.startsWith('https://'));
+  return prod || 'https://shofichat.vercel.app';
+};
+
 const getFromAddress = () => {
-  const rawUser = (EMAIL_USER || '').trim();
+  const rawUser = (EMAIL_USER || process.env.EMAIL_USER || 'shofiqul.sujon2201@gmail.com').trim();
   if (rawUser && rawUser.includes('@gmail.com')) {
     return `"Shofi Chat" <${rawUser}>`;
   }
-  return EMAIL_FROM || (rawUser ? `"Shofi Chat" <${rawUser}>` : '"Shofi Chat" <noreply@shofichat.com>');
+  return EMAIL_FROM || (rawUser ? `"Shofi Chat" <${rawUser}>` : '"Shofi Chat" <shofiqul.sujon2201@gmail.com>');
 };
 
 let transporter = null;
 
-// Initialize Nodemailer transporter
+// Initialize Nodemailer transporter (Production-Grade Gmail SMTP)
 const getTransporter = () => {
   if (transporter) return transporter;
 
-  const rawUser = (EMAIL_USER || '').trim();
-  // Strip spaces if user pasted 16-character Google App Password with spaces
-  const rawPass = (EMAIL_PASS || '').replace(/\s+/g, '').trim();
+  const rawUser = (EMAIL_USER || process.env.EMAIL_USER || 'shofiqul.sujon2201@gmail.com').trim();
+  const rawPass = (EMAIL_PASS || process.env.EMAIL_PASS || 'ykiq zcfo dxep cntz').replace(/\s+/g, '').trim();
 
   if (!rawUser || !rawPass) {
-    console.log('[EmailService] EMAIL_USER or EMAIL_PASS not configured in .env / environment variables. Email notifications skipped.');
+    console.log('[EmailService] EMAIL_USER or EMAIL_PASS not configured in environment. Skipping email.');
     return null;
   }
 
   try {
-    const isGmail = (EMAIL_HOST || '').includes('gmail.com') || rawUser.includes('@gmail.com');
-
-    if (isGmail) {
-      transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: rawUser,
-          pass: rawPass,
-        },
-      });
-    } else {
-      transporter = nodemailer.createTransport({
-        host: EMAIL_HOST,
-        port: EMAIL_PORT,
-        secure: EMAIL_SECURE,
-        auth: {
-          user: rawUser,
-          pass: rawPass,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-    }
-    console.log(`[EmailService] Transporter initialized successfully (${isGmail ? 'Gmail Service' : EMAIL_HOST})`);
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: rawUser,
+        pass: rawPass,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+    console.log(`[EmailService] Production Transporter initialized successfully (${rawUser})`);
     return transporter;
   } catch (err) {
     console.error('[EmailService] Failed to initialize email transporter:', err);
@@ -70,7 +62,7 @@ const getTransporter = () => {
  * Base email wrapper with responsive HTML styling (Stripe / Linear caliber)
  */
 const renderEmailLayout = ({ title, preheader, contentHtml }) => {
-  const currentClient = (CLIENT_URL || 'https://shofichat.vercel.app').split(',')[0].trim();
+  const currentClient = getLiveClientUrl();
 
   return `
 <!DOCTYPE html>
@@ -254,7 +246,7 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
     return;
   }
 
-  const clientUrl = (CLIENT_URL || 'https://shofichat.vercel.app').split(',')[0].trim();
+  const clientUrl = getLiveClientUrl();
   const displayName = name || to.split('@')[0];
 
   const contentHtml = `
@@ -338,9 +330,12 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
     return;
   }
 
-  const clientUrl = (CLIENT_URL || 'https://shofichat.vercel.app').split(',')[0].trim();
+  const clientUrl = getLiveClientUrl();
   const fromName = senderName || senderEmail?.split('@')[0] || 'A user';
   const recName = recipientName || to.split('@')[0];
+  const safeAvatar = (senderAvatar && !senderAvatar.endsWith('.svg'))
+    ? senderAvatar
+    : `https://api.dicebear.com/7.x/initials/png?seed=${encodeURIComponent(fromName)}&backgroundColor=10b981&textColor=ffffff`;
 
   const contentHtml = `
     <h2>New Friend Invitation 🤝</h2>
@@ -353,7 +348,7 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
         <tr>
           <td style="width: 54px; vertical-align: middle;">
             <div style="width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: #27272a; border: 2px solid #10b981;">
-              <img src="${senderAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fromName)}`}" alt="${fromName}" style="width: 100%; height: 100%; display: block; object-fit: cover;" />
+              <img src="${safeAvatar}" alt="${fromName}" style="width: 100%; height: 100%; display: block; object-fit: cover;" />
             </div>
           </td>
           <td style="padding-left: 14px; vertical-align: middle;">

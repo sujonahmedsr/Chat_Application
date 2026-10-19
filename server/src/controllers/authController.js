@@ -42,8 +42,14 @@ const getGoogleAuthUrl = async (req, res, next) => {
     const isHostLocal = host.includes('localhost') || host.includes('127.0.0.1');
     const callbackUrl = isHostLocal ? defaultCallback : (GOOGLE_CALLBACK_URL || defaultCallback);
 
+    // Helper to get production live client URL
+    const getLiveClient = () => {
+      const urls = (CLIENT_URL || 'https://shofichat.vercel.app').split(',').map((u) => u.trim());
+      return urls.find((u) => u.includes('vercel.app') || u.startsWith('https://')) || urls[0] || 'https://shofichat.vercel.app';
+    };
+
     // Detect where user is coming from (via query param or config CLIENT_URL)
-    const fallbackClient = (CLIENT_URL || 'http://localhost:3000').split(',')[0].trim();
+    const fallbackClient = getLiveClient();
     const clientOrigin = req.query.client_url || req.get('origin') || req.get('referer') || fallbackClient;
     const cleanOrigin = (clientOrigin || '').replace(/\/+$/, '').split('?')[0];
 
@@ -70,8 +76,19 @@ const getGoogleAuthUrl = async (req, res, next) => {
 
 // 2. Direct Google OAuth 2.0 Callback
 const googleOAuthCallback = async (req, res, next) => {
-  const defaultClient = (CLIENT_URL || 'http://localhost:3000').split(',')[0].trim();
-  const targetClient = (req.query.state || defaultClient).replace(/\/+$/, '');
+  const getLiveClient = () => {
+    const urls = (CLIENT_URL || 'https://shofichat.vercel.app').split(',').map((u) => u.trim());
+    return urls.find((u) => u.includes('vercel.app') || u.startsWith('https://')) || urls[0] || 'https://shofichat.vercel.app';
+  };
+
+  const defaultClient = getLiveClient();
+  let targetClient = (req.query.state || defaultClient).replace(/\/+$/, '');
+
+  // In production (Render), prevent any accidental redirect to localhost
+  const requestHost = req.get('host') || '';
+  if (requestHost.includes('render.com') && targetClient.includes('localhost')) {
+    targetClient = defaultClient;
+  }
 
   try {
     const { code } = req.query;
