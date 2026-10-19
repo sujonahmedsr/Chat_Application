@@ -1,7 +1,19 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Mic, Trash2, Check, X, AtSign } from 'lucide-react';
+import {
+  Send,
+  Smile,
+  Mic,
+  Trash2,
+  X,
+  AtSign,
+  Paperclip,
+  Image as ImageIcon,
+  ArrowUp,
+  FileText,
+  Search,
+} from 'lucide-react';
 import { User } from '@/types';
 import { Avatar } from '../ui/Avatar';
 
@@ -19,18 +31,43 @@ interface MessageInputProps {
   groupMembers?: User[];
 }
 
-const EMOJI_CATEGORIES = [
+interface EmojiCategory {
+  id: string;
+  name: string;
+  icon: string;
+  emojis: string[];
+}
+
+const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
-    name: 'Smileys & Emotion',
-    emojis: ['😊', '😂', '🤣', '❤️', '😍', '🥰', '😘', '😎', '🤩', '🥳', '🥺', '😭', '😇', '🤔', '🤫', '🤗', '😴', '😜', '🔥', '💯'],
+    id: 'smileys',
+    name: 'Smileys',
+    icon: '😊',
+    emojis: ['😊', '😂', '🤣', '❤️', '😍', '🥰', '😘', '😎', '🤩', '🥳', '🥺', '😭', '😇', '🤔', '🤫', '🤗', '😴', '😜', '🔥', '💯', '✨', '💖', '💔', '💀'],
   },
   {
-    name: 'Gestures & People',
-    emojis: ['👍', '👎', '👏', '🙌', '🙏', '🤝', '✌️', '🤞', '💪', '👋', '🤙', '👌', '👀', '💖', '💔', '✨', '⭐', '⚡', '🎉', '🚀'],
+    id: 'gestures',
+    name: 'Gestures',
+    icon: '👍',
+    emojis: ['👍', '👎', '👏', '🙌', '🙏', '🤝', '✌️', '🤞', '💪', '👋', '🤙', '👌', '👀', '🫡', '👊', '✊', '🤛', '🤜', '🫰', '🫶'],
   },
   {
-    name: 'Animals & Nature',
-    emojis: ['🐱', '🐶', '🦁', '🐼', '🦊', '🌺', '🌸', '🌹', '🍀', '🌴', '🌞', '🌙', '⭐', '🌈', '🌧️', '❄️', '☕', '🍕', '🍔', '🍦'],
+    id: 'nature',
+    name: 'Nature & Animals',
+    icon: '🌸',
+    emojis: ['🐱', '🐶', '🦁', '🐼', '🦊', '🌺', '🌸', '🌹', '🍀', '🌴', '🌞', '🌙', '⭐', '🌈', '🌧️', '❄️', '🌿', '🌱', '🌻', '🍁'],
+  },
+  {
+    id: 'food',
+    name: 'Food & Drink',
+    icon: '🍕',
+    emojis: ['☕', '🍕', '🍔', '🍦', '🍩', '🍫', '🍿', '🧁', '🍟', '🍣', '🍎', '🍓', '🍇', '🍉', '🥑', '🍹', '🍺', '🎂', '🥞', '🥤'],
+  },
+  {
+    id: 'objects',
+    name: 'Objects & Travel',
+    icon: '🚀',
+    emojis: ['🎉', '🚀', '⚡', '💡', '🎵', '🎮', '📱', '💻', '📷', '✈️', '🚗', '🏆', '🎯', '🎈', '🎁', '💎', '🔑', '🔔', '📌', '📦'],
   },
 ];
 
@@ -42,10 +79,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 }) => {
   const [content, setContent] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState<string>('smileys');
+  const [emojiSearch, setEmojiSearch] = useState('');
+
+  // Pending file attachment state (images/documents)
+  const [pendingFile, setPendingFile] = useState<{
+    file: File;
+    previewUrl: string;
+    isImage: boolean;
+  } | null>(null);
 
   // Mention state
   const [showMentions, setShowMentions] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState('');
   const [filteredMembers, setFilteredMembers] = useState<User[]>([]);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
 
@@ -56,10 +101,20 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const typingTimeoutRef = useRef<any>(null);
   const isTypingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+
+  // Auto-resize textarea like ChatGPT / Telegram
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 140);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  };
 
   const checkMentionTrigger = (text: string, cursorPos: number) => {
     if (!groupMembers || groupMembers.length === 0) {
@@ -72,11 +127,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     if (match) {
       const query = match[1].toLowerCase();
-      setMentionFilter(query);
-      const filtered = groupMembers.filter((m) =>
-        m.name.toLowerCase().includes(query) ||
-        (m.username && m.username.toLowerCase().includes(query)) ||
-        (m.email && m.email.toLowerCase().includes(query))
+      const filtered = groupMembers.filter(
+        (m) =>
+          m.name.toLowerCase().includes(query) ||
+          (m.username && m.username.toLowerCase().includes(query)) ||
+          (m.email && m.email.toLowerCase().includes(query))
       );
       setFilteredMembers(filtered);
       setMentionSelectedIndex(0);
@@ -89,6 +144,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setContent(val);
+    adjustTextareaHeight();
     checkMentionTrigger(val, e.target.selectionStart || 0);
 
     if (!isTypingRef.current) {
@@ -122,12 +178,36 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       if (textareaRef.current) {
         textareaRef.current.focus();
         textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newBefore.length;
+        adjustTextareaHeight();
       }
     }, 0);
   };
 
+  // Handle file / image picker
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith('image/');
+    const previewUrl = URL.createObjectURL(file);
+    setPendingFile({ file, previewUrl, isImage });
+    e.target.value = '';
+
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  const removePendingFile = () => {
+    if (pendingFile?.previewUrl) {
+      URL.revokeObjectURL(pendingFile.previewUrl);
+    }
+    setPendingFile(null);
+  };
+
   const handleSend = () => {
-    if (!content.trim()) return;
+    const trimmed = content.trim();
+    if (!trimmed && !pendingFile) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -135,12 +215,32 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     isTypingRef.current = false;
     onTypingStop();
 
-    onSendMessage(content.trim());
+    // If pending attachment exists, convert to base64 and dispatch
+    if (pendingFile) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const fileUrl = reader.result as string;
+        onSendMessage(trimmed, {
+          messageType: pendingFile.isImage ? 'image' : 'file',
+          fileUrl,
+          fileName: pendingFile.file.name,
+          fileSize: pendingFile.file.size,
+        });
+        removePendingFile();
+        resetInput();
+      };
+      reader.readAsDataURL(pendingFile.file);
+      return;
+    }
 
+    onSendMessage(trimmed);
+    resetInput();
+  };
+
+  const resetInput = () => {
     setContent('');
     setShowEmojiPicker(false);
     setShowMentions(false);
-
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -208,7 +308,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
-  // Stop recording and send voice note
   const sendVoiceRecording = () => {
     if (!mediaRecorderRef.current || !isRecording) return;
 
@@ -237,7 +336,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setRecordingSeconds(0);
   };
 
-  // Discard voice recording
   const discardRecording = () => {
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
@@ -259,18 +357,35 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (pendingFile?.previewUrl) URL.revokeObjectURL(pendingFile.previewUrl);
     };
-  }, []);
+  }, [pendingFile]);
+
+  const hasContentOrAttachment = content.trim().length > 0 || pendingFile !== null;
+
+  // Filter emojis by search
+  const visibleEmojis = emojiSearch.trim()
+    ? EMOJI_CATEGORIES.flatMap((c) => c.emojis)
+    : EMOJI_CATEGORIES.find((c) => c.id === activeEmojiCategory)?.emojis || [];
 
   return (
-    <div className="relative p-3 bg-neutral-900 border-t border-neutral-800">
-      {/* GROUP @ MENTION POPUP */}
+    <div className="relative p-2.5 sm:px-4 sm:py-3 bg-neutral-950/90 backdrop-blur-2xl border-t border-neutral-800/80">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+        className="hidden"
+      />
+
+      {/* GROUP @ MENTION POPUP (Telegram Style) */}
       {showMentions && filteredMembers.length > 0 && (
-        <div className="absolute bottom-16 left-2 right-2 sm:left-12 sm:right-auto sm:w-80 bg-neutral-900/95 backdrop-blur-md border border-neutral-800 rounded-2xl shadow-2xl z-40 overflow-hidden max-h-56 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="px-3 py-2 border-b border-neutral-800/80 bg-neutral-950/40 flex items-center justify-between">
+        <div className="absolute bottom-[72px] left-3 sm:left-6 right-3 sm:right-auto sm:w-80 bg-neutral-900/95 backdrop-blur-xl border border-neutral-800 rounded-2xl shadow-2xl z-40 overflow-hidden max-h-60 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="px-3.5 py-2 border-b border-neutral-800/80 bg-neutral-950/60 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-neutral-400 flex items-center gap-1.5">
               <AtSign className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Mention group member</span>
+              <span>Mention member</span>
             </span>
             <span className="text-[10px] text-neutral-500 font-mono">↑↓ Enter</span>
           </div>
@@ -283,8 +398,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 onClick={() => insertMention(member)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-colors ${
                   idx === mentionSelectedIndex
-                    ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
-                    : 'text-neutral-200 hover:bg-neutral-800'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-neutral-200 hover:bg-neutral-800/70'
                 }`}
               >
                 <Avatar name={member.name} avatar={member.avatar} size="sm" />
@@ -300,47 +415,77 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {/* EMOJI PICKER POPUP */}
+      {/* EMOJI & STICKER PICKER POPUP (WhatsApp / Telegram Style) */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-2 sm:left-3 bg-neutral-900 border border-neutral-800 rounded-2xl p-3 shadow-2xl z-30 w-[calc(100vw-1rem)] max-w-xs sm:w-80 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-800">
-            <span className="text-xs font-semibold text-neutral-300">Emojis</span>
+        <div className="absolute bottom-[72px] left-3 sm:left-6 bg-neutral-900/95 backdrop-blur-2xl border border-neutral-800 rounded-2xl p-3 shadow-2xl z-40 w-[calc(100vw-1.5rem)] max-w-sm sm:w-84 max-h-80 flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-150">
+          {/* Header & Search */}
+          <div className="flex items-center gap-2 pb-2 mb-2 border-b border-neutral-800/80">
+            <div className="flex-1 flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-800/70 rounded-xl text-xs text-neutral-300 border border-neutral-700/50 focus-within:border-emerald-500/50">
+              <Search className="w-3.5 h-3.5 text-neutral-400" />
+              <input
+                type="text"
+                value={emojiSearch}
+                onChange={(e) => setEmojiSearch(e.target.value)}
+                placeholder="Search emojis..."
+                className="w-full bg-transparent placeholder-neutral-500 focus:outline-none text-xs text-white"
+              />
+            </div>
             <button
               onClick={() => setShowEmojiPicker(false)}
-              className="text-neutral-500 hover:text-white"
+              className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {EMOJI_CATEGORIES.map((cat) => (
-            <div key={cat.name} className="mb-3">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-neutral-500 block mb-1">
-                {cat.name}
-              </span>
-              <div className="grid grid-cols-8 gap-1">
-                {cat.emojis.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => {
-                      setContent((prev) => prev + emoji);
-                      if (textareaRef.current) textareaRef.current.focus();
-                    }}
-                    className="h-8 flex items-center justify-center text-lg hover:bg-neutral-800 rounded-lg transition-transform hover:scale-125"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+          {/* Category tabs */}
+          {!emojiSearch && (
+            <div className="flex items-center justify-between px-1 mb-2">
+              {EMOJI_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveEmojiCategory(cat.id)}
+                  className={`text-base p-1.5 rounded-xl transition-all ${
+                    activeEmojiCategory === cat.id
+                      ? 'bg-emerald-500/20 scale-110 shadow-sm shadow-emerald-500/20'
+                      : 'hover:bg-neutral-800 opacity-60 hover:opacity-100'
+                  }`}
+                  title={cat.name}
+                >
+                  {cat.icon}
+                </button>
+              ))}
             </div>
-          ))}
+          )}
+
+          {/* Emoji Grid */}
+          <div className="flex-1 overflow-y-auto max-h-48 pr-1">
+            <div className="grid grid-cols-8 gap-1">
+              {visibleEmojis.map((emoji, index) => (
+                <button
+                  key={`${emoji}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    setContent((prev) => prev + emoji);
+                    if (textareaRef.current) {
+                      textareaRef.current.focus();
+                      adjustTextareaHeight();
+                    }
+                  }}
+                  className="h-9 flex items-center justify-center text-xl hover:bg-neutral-800 rounded-xl transition-transform active:scale-125 hover:scale-115"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* MODERN VOICE RECORDING OVERLAY */}
+      {/* MODERN VOICE RECORDING OVERLAY (WhatsApp / Telegram Waveform Style) */}
       {isRecording ? (
-        <div className="flex items-center justify-between bg-neutral-950/90 backdrop-blur-md border border-rose-500/40 rounded-2xl px-4 py-3 shadow-2xl shadow-rose-950/20 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between bg-neutral-900/95 backdrop-blur-xl border border-rose-500/40 rounded-[28px] px-4 py-2.5 shadow-2xl shadow-rose-950/30 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center gap-3">
             {/* Pulsing Red Live indicator */}
             <div className="relative flex items-center justify-center w-4 h-4">
@@ -349,17 +494,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             </div>
 
             {/* Live recording timer */}
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-rose-400">
-                Recording Voice
-              </span>
-              <span className="text-sm font-mono font-bold text-white tracking-widest">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold text-white tracking-wider">
                 {formatSeconds(recordingSeconds)}
+              </span>
+              <span className="text-[11px] font-medium text-rose-400">
+                Recording...
               </span>
             </div>
 
             {/* Dynamic animated waveform equalizer bars */}
-            <div className="hidden sm:flex items-center gap-1 ml-4 h-6">
+            <div className="hidden sm:flex items-center gap-1 ml-4 h-5">
               {[40, 75, 55, 90, 60, 100, 70, 85, 45, 95, 65, 80].map((height, i) => (
                 <span
                   key={i}
@@ -379,75 +524,127 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             <button
               type="button"
               onClick={discardRecording}
-              className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 border border-neutral-800 hover:border-rose-500/40 transition-all active:scale-95 flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-full bg-neutral-800 hover:bg-rose-500/20 text-neutral-300 hover:text-rose-400 border border-neutral-700/60 hover:border-rose-500/40 transition-all active:scale-95 flex items-center gap-1.5 text-xs font-medium"
               title="Discard Recording"
             >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs font-medium">Discard</span>
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Cancel</span>
             </button>
 
             {/* Send voice recording button */}
             <button
               type="button"
               onClick={sendVoiceRecording}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40 transition-all active:scale-95 flex items-center gap-1.5"
+              className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-white shadow-lg shadow-emerald-500/25 transition-transform active:scale-95 flex items-center justify-center"
               title="Send Voice Note"
             >
-              <Send className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs font-semibold">Send</span>
+              <ArrowUp className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
         </div>
       ) : (
-        /* NORMAL TEXT + AUDIO INPUT */
-        <div className="flex items-end gap-2">
-          {/* Emoji Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
-            className={`p-2.5 rounded-xl transition-colors ${
-              showEmojiPicker
-                ? 'text-emerald-400 bg-neutral-800'
-                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
-            }`}
-            title="Add Emoji"
-          >
-            <Smile className="w-5 h-5" />
-          </button>
+        /* ULTRA-MODERN CHATGPT / WHATSAPP / TELEGRAM INPUT CAPSULE */
+        <div className="flex flex-col bg-neutral-900/90 border border-neutral-700/60 hover:border-neutral-600 focus-within:border-emerald-500/70 focus-within:ring-2 focus-within:ring-emerald-500/15 rounded-[26px] shadow-xl shadow-black/25 transition-all duration-200">
+          {/* PENDING ATTACHMENT PREVIEW CHIP (WhatsApp / Telegram style) */}
+          {pendingFile && (
+            <div className="mx-3 mt-2.5 p-2 rounded-2xl bg-neutral-950/70 border border-neutral-800 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {pendingFile.isImage ? (
+                  <img
+                    src={pendingFile.previewUrl}
+                    alt="Preview"
+                    className="w-10 h-10 rounded-xl object-cover border border-neutral-700/50 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-neutral-200 truncate">
+                    {pendingFile.file.name}
+                  </p>
+                  <p className="text-[10px] text-neutral-400">
+                    {(pendingFile.file.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              </div>
 
-          {/* Text Area */}
-          <div className="flex-1 bg-neutral-800/90 border border-neutral-800 focus-within:border-emerald-500/80 rounded-2xl px-3 py-2 transition-all">
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={groupMembers && groupMembers.length > 0 ? "Type a message or @ to mention..." : "Type a message..."}
-              rows={1}
-              className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none resize-none max-h-32"
-            />
-          </div>
-
-          {/* Record Voice Note or Send Text */}
-          {content.trim() ? (
-            <button
-              type="button"
-              onClick={handleSend}
-              className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/30 transition-transform active:scale-95"
-              title="Send Message"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={startRecording}
-              className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-emerald-400 hover:border-emerald-500/30 border border-neutral-800 transition-all active:scale-95 group"
-              title="Record Voice Note"
-            >
-              <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            </button>
+              <button
+                type="button"
+                onClick={removePendingFile}
+                className="p-1 rounded-full text-neutral-400 hover:text-rose-400 hover:bg-neutral-800/80 transition-colors"
+                title="Remove attachment"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           )}
+
+          {/* MAIN INPUT ROW */}
+          <div className="flex items-end gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2">
+            {/* Attachment Button (Paperclip) */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 rounded-full text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80 transition-all active:scale-95 flex-shrink-0"
+              title="Attach photo or document"
+            >
+              <Paperclip className="w-5 h-5 rotate-45" />
+            </button>
+
+            {/* Emoji Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker((prev) => !prev)}
+              className={`p-2 rounded-full transition-all active:scale-95 flex-shrink-0 ${
+                showEmojiPicker
+                  ? 'text-emerald-400 bg-emerald-500/15'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/80'
+              }`}
+              title="Add Emoji"
+            >
+              <Smile className="w-5 h-5" />
+            </button>
+
+            {/* Auto-Expanding Textarea (ChatGPT / Telegram style) */}
+            <div className="flex-1 flex items-center min-w-0 py-1">
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  groupMembers && groupMembers.length > 0
+                    ? 'Message or type @ to mention...'
+                    : 'Message...'
+                }
+                rows={1}
+                className="w-full bg-transparent text-[14px] text-neutral-100 placeholder-neutral-500 focus:outline-none resize-none leading-relaxed max-h-36 scrollbar-thin scrollbar-thumb-neutral-700"
+              />
+            </div>
+
+            {/* Dynamic Action Button: Send (Circular ArrowUp/Send) vs Voice Mic */}
+            {hasContentOrAttachment ? (
+              <button
+                type="button"
+                onClick={handleSend}
+                className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-white shadow-md shadow-emerald-500/25 transition-all duration-150 active:scale-90 flex items-center justify-center flex-shrink-0"
+                title="Send Message"
+              >
+                <ArrowUp className="w-5 h-5 stroke-[2.5]" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                className="w-9 h-9 rounded-full text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800/80 transition-all duration-150 active:scale-90 flex items-center justify-center flex-shrink-0 group"
+                title="Record Voice Note"
+              >
+                <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

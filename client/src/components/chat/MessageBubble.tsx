@@ -15,6 +15,8 @@ import {
   Copy,
   Pencil,
   X,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { Message } from '@/types';
 
@@ -442,6 +444,45 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {message.replyTo.content}
                 </p>
               </div>
+            )}
+
+            {/* IMAGE ATTACHMENT (WhatsApp / Telegram style) */}
+            {message.messageType === 'image' && message.fileUrl && (
+              <div className="mb-2 overflow-hidden rounded-2xl max-w-sm border border-black/10">
+                <img
+                  src={message.fileUrl}
+                  alt={message.fileName || 'Photo'}
+                  className="w-full max-h-72 object-cover rounded-2xl cursor-pointer hover:opacity-95 transition-opacity"
+                  onClick={() => window.open(message.fileUrl, '_blank')}
+                  loading="lazy"
+                />
+              </div>
+            )}
+
+            {/* DOCUMENT / FILE ATTACHMENT */}
+            {message.messageType === 'file' && message.fileUrl && (
+              <a
+                href={message.fileUrl}
+                download={message.fileName || 'download'}
+                target="_blank"
+                rel="noreferrer"
+                className={`mb-2 flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border transition-all ${
+                  isSelf
+                    ? 'bg-white/15 border-white/20 hover:bg-white/25 text-white'
+                    : 'bg-white border-neutral-200/80 hover:bg-neutral-50 text-neutral-800'
+                }`}
+              >
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-500 flex-shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold truncate">{message.fileName || 'Attachment'}</p>
+                  {message.fileSize ? (
+                    <p className="text-[10px] opacity-70">{(message.fileSize / 1024).toFixed(1)} KB</p>
+                  ) : null}
+                </div>
+                <Download className="w-4 h-4 opacity-70 flex-shrink-0" />
+              </a>
             )}
 
             {/* AUDIO / VOICE NOTE ATTACHMENT */}
