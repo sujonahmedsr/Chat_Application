@@ -286,7 +286,7 @@ const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                 <tr>
                   <td align="center" style="vertical-align: middle;">
-                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; text-align: center; color: #ffffff; font-size: 22px; font-weight: bold; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); border-radius: 12px; text-align: center; color: #ffffff; font-size: 22px; font-weight: bold;display: flex;align-items: center;justify-content: center; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);">
                       &#128172;
                     </div>
                   </td>
