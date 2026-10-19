@@ -233,8 +233,6 @@ const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
       -ms-interpolation-mode: bicubic;
       max-width: 100%;
       display: block;
-      width: 24px;
-      margin: 0 auto;
     }
     a {
       text-decoration: none;
