@@ -59,6 +59,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    hasReceivedWelcomeEmail: {
+      type: Boolean,
+      default: false,
+    },
     lastSeen: {
       type: Date,
       default: Date.now,

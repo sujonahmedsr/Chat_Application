@@ -143,6 +143,7 @@ const googleOAuthCallback = async (req, res, next) => {
         role: isSuperAdmin ? 'admin' : 'user',
         isOnline: true,
         lastSeen: new Date(),
+        hasReceivedWelcomeEmail: true,
         settings: {
           saveChatHistory: true,
           chatRetentionDays: 15,
@@ -150,7 +151,7 @@ const googleOAuthCallback = async (req, res, next) => {
         },
       });
 
-      // Send Welcome Email asynchronously
+      // Send Welcome Email once on account creation
       sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
     } else {
       if (user.isBlockedByAdmin) {
@@ -167,6 +168,13 @@ const googleOAuthCallback = async (req, res, next) => {
       }
       user.isOnline = true;
       user.lastSeen = new Date();
+
+      // Only send if user has never received it before
+      if (!user.hasReceivedWelcomeEmail) {
+        user.hasReceivedWelcomeEmail = true;
+        sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
+      }
+
       await user.save();
     }
 
@@ -227,6 +235,7 @@ const googleAuth = async (req, res, next) => {
         role: isSuperAdmin ? 'admin' : 'user',
         isOnline: true,
         lastSeen: new Date(),
+        hasReceivedWelcomeEmail: true,
         settings: {
           saveChatHistory: true,
           chatRetentionDays: 15,
@@ -234,7 +243,7 @@ const googleAuth = async (req, res, next) => {
         },
       });
 
-      // Send Welcome Email asynchronously
+      // Send Welcome Email once on account creation
       sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
     } else {
       if (user.isBlockedByAdmin) {
@@ -258,6 +267,13 @@ const googleAuth = async (req, res, next) => {
 
       user.isOnline = true;
       user.lastSeen = new Date();
+
+      // Only send if user has never received it before
+      if (!user.hasReceivedWelcomeEmail) {
+        user.hasReceivedWelcomeEmail = true;
+        sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
+      }
+
       await user.save();
     }
 
@@ -333,6 +349,7 @@ const register = async (req, res, next) => {
       isOnline: true,
       lastSeen: new Date(),
       role: isSuperAdmin ? 'admin' : 'user',
+      hasReceivedWelcomeEmail: true,
       settings: {
         saveChatHistory: true,
         chatRetentionDays: 15,
@@ -340,7 +357,7 @@ const register = async (req, res, next) => {
       },
     });
 
-    // Send Welcome Email asynchronously
+    // Send Welcome Email once on account creation
     sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
 
     const token = generateToken(user._id);
@@ -402,6 +419,13 @@ const login = async (req, res, next) => {
 
     user.isOnline = true;
     user.lastSeen = new Date();
+
+    // Only send if user has never received it before
+    if (!user.hasReceivedWelcomeEmail) {
+      user.hasReceivedWelcomeEmail = true;
+      sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
+    }
+
     await user.save();
 
     const token = generateToken(user._id);

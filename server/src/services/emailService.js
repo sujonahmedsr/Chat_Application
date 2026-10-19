@@ -9,35 +9,60 @@ const {
   CLIENT_URL,
 } = require('../config/config');
 
-let transporter = null;
+const getFromAddress = () => {
+  const rawUser = (EMAIL_USER || '').trim();
+  if (rawUser && rawUser.includes('@gmail.com')) {
+    return `"Shofi Chat" <${rawUser}>`;
+  }
+  return EMAIL_FROM || (rawUser ? `"Shofi Chat" <${rawUser}>` : '"Shofi Chat" <noreply@shofichat.com>');
+};
 
 // Initialize Nodemailer transporter
 const getTransporter = () => {
   if (transporter) return transporter;
 
-  if (!EMAIL_USER || !EMAIL_PASS) {
+  const rawUser = (EMAIL_USER || '').trim();
+  // Strip spaces if user pasted 16-character Google App Password with spaces
+  const rawPass = (EMAIL_PASS || '').replace(/\s+/g, '').trim();
+
+  if (!rawUser || !rawPass) {
+    console.log('[EmailService] EMAIL_USER or EMAIL_PASS not configured in .env / environment variables. Email notifications skipped.');
     return null;
   }
 
   try {
-    transporter = nodemailer.createTransport({
-      host: EMAIL_HOST,
-      port: EMAIL_PORT,
-      secure: EMAIL_SECURE,
-      auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+    const isGmail = (EMAIL_HOST || '').includes('gmail.com') || rawUser.includes('@gmail.com');
+
+    if (isGmail) {
+      transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: rawUser,
+          pass: rawPass,
+        },
+      });
+    } else {
+      transporter = nodemailer.createTransport({
+        host: EMAIL_HOST,
+        port: EMAIL_PORT,
+        secure: EMAIL_SECURE,
+        auth: {
+          user: rawUser,
+          pass: rawPass,
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
+    }
+    console.log(`[EmailService] Transporter initialized successfully (${isGmail ? 'Gmail Service' : EMAIL_HOST})`);
     return transporter;
   } catch (err) {
     console.error('[EmailService] Failed to initialize email transporter:', err);
     return null;
   }
 };
+
 
 /**
  * Base email wrapper with responsive HTML styling
@@ -199,7 +224,7 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
 
   try {
     const info = await mailTransporter.sendMail({
-      from: EMAIL_FROM,
+      from: getFromAddress(),
       to,
       subject: `Welcome to Shofi Chat, ${displayName}! 🚀`,
       html: renderEmailLayout({
@@ -254,7 +279,7 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
 
   try {
     const info = await mailTransporter.sendMail({
-      from: EMAIL_FROM,
+      from: getFromAddress(),
       to,
       subject: `💬 ${fromName} sent you a friend request on Shofi Chat`,
       html: renderEmailLayout({
