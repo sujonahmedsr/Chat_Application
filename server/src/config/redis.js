@@ -1,62 +1,53 @@
 const Redis = require('ioredis');
-const { REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD } = require('./config');
+const { REDIS_URL } = require('./config');
 
 let redisClient = null;
 let isConnected = false;
 
-try {
-  const options = {
-    connectTimeout: 2500,
-    maxRetriesPerRequest: 1,
-    retryStrategy(times) {
-      if (times > 5) {
-        return null; // Stop retrying after 5 attempts, smoothly fallback to in-memory
-      }
-      return Math.min(times * 300, 2000);
-    },
-    lazyConnect: true,
-  };
+// Only initialize Redis client if a non-empty REDIS_URL is configured
+if (REDIS_URL && REDIS_URL.trim()) {
+  const isLocalHost = REDIS_URL.includes('127.0.0.1') || REDIS_URL.includes('localhost');
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  if (REDIS_URL && REDIS_URL.trim()) {
-    redisClient = new Redis(REDIS_URL.trim(), options);
-  } else {
-    redisClient = new Redis({
-      host: REDIS_HOST,
-      port: REDIS_PORT,
-      password: REDIS_PASSWORD || undefined,
-      ...options,
-    });
-  }
+  // In production (e.g. Render), skip connecting to localhost to avoid connection errors
+  if (!isProduction || !isLocalHost) {
+    try {
+      redisClient = new Redis(REDIS_URL.trim(), {
+        connectTimeout: 3000,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        retryStrategy(times) {
+          if (times > 3) return null; // Stop retrying after 3 attempts, smoothly fallback to in-memory
+          return Math.min(times * 300, 1500);
+        },
+        lazyConnect: true,
+      });
 
-  redisClient.on('connect', () => {
-    isConnected = true;
-    console.log('[Redis] Connected to Redis instance successfully.');
-  });
+      redisClient.on('connect', () => {
+        isConnected = true;
+        console.log('[Redis] Connected to external Redis instance successfully.');
+      });
 
-  redisClient.on('ready', () => {
-    isConnected = true;
-  });
+      redisClient.on('ready', () => {
+        isConnected = true;
+      });
 
-  redisClient.on('close', () => {
-    isConnected = false;
-  });
+      redisClient.on('close', () => {
+        isConnected = false;
+      });
 
-  redisClient.on('error', (err) => {
-    isConnected = false;
-    // Keep error output clean and non-fatal
-    if (process.env.NODE_ENV !== 'production' && !redisClient._hasLoggedWarning) {
-      console.warn(`[Redis] Connection warning (${err.code || err.message}). Fallback to in-memory cache.`);
-      redisClient._hasLoggedWarning = true;
+      redisClient.on('error', (err) => {
+        isConnected = false;
+      });
+
+      // Attempt non-blocking connection
+      redisClient.connect().catch(() => {
+        isConnected = false;
+      });
+    } catch (err) {
+      isConnected = false;
     }
-  });
-
-  // Attempt initial connection asynchronously without blocking server startup
-  redisClient.connect().catch(() => {
-    isConnected = false;
-  });
-} catch (err) {
-  console.warn('[Redis] Initialization warning:', err.message);
-  isConnected = false;
+  }
 }
 
 module.exports = {

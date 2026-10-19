@@ -182,9 +182,6 @@ const getGroupMessages = async (req, res, next) => {
     next(error);
   }
 };
-    next(error);
-  }
-};
 
 // Clear all messages in a group (Only Group Creator)
 const clearGroupMessages = async (req, res, next) => {
