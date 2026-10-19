@@ -17,4 +17,10 @@ module.exports = {
   REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+  EMAIL_HOST: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+  EMAIL_PORT: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587', 10),
+  EMAIL_SECURE: process.env.EMAIL_SECURE === 'true',
+  EMAIL_USER: process.env.EMAIL_USER || process.env.SMTP_USER || '',
+  EMAIL_PASS: process.env.EMAIL_PASS || process.env.SMTP_PASS || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || process.env.EMAIL_USER || '"Shofi Chat" <noreply@shofichat.com>',
 };

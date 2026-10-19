@@ -4,6 +4,7 @@ const Message = require('../models/Message');
 const { isUserOnline } = require('../sockets/presenceHandler');
 const { decryptServerMessage } = require('../utils/encryption');
 const cacheService = require('../services/cacheService');
+const { sendFriendRequestEmail } = require('../services/emailService');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 
 // Get all confirmed friends for current user
@@ -247,6 +248,15 @@ const sendFriendRequest = async (req, res, next) => {
     } catch (e) {
       // socket might be offline or testing
     }
+
+    // Send email notification to recipient asynchronously
+    sendFriendRequestEmail({
+      to: targetUser.email,
+      recipientName: targetUser.name,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      senderEmail: currentUser.email,
+    }).catch(() => {});
 
     return res.status(200).json({ success: true, message: 'Friend request sent!' });
   } catch (error) {

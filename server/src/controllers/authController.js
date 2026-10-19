@@ -11,6 +11,7 @@ const {
   CLIENT_URL,
 } = require('../config/config');
 const cacheService = require('../services/cacheService');
+const { sendWelcomeEmail } = require('../services/emailService');
 
 // Helper to decode or verify Google credential if provided
 const decodeGoogleCredential = (credential) => {
@@ -148,6 +149,9 @@ const googleOAuthCallback = async (req, res, next) => {
           hasCompletedSetup: false,
         },
       });
+
+      // Send Welcome Email asynchronously
+      sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
     } else {
       if (user.isBlockedByAdmin) {
         return res.redirect(`${targetClient}/login?error=Account_suspended`);
@@ -229,6 +233,9 @@ const googleAuth = async (req, res, next) => {
           hasCompletedSetup: false,
         },
       });
+
+      // Send Welcome Email asynchronously
+      sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
     } else {
       if (user.isBlockedByAdmin) {
         return res.status(403).json({
@@ -332,6 +339,9 @@ const register = async (req, res, next) => {
         hasCompletedSetup: false,
       },
     });
+
+    // Send Welcome Email asynchronously
+    sendWelcomeEmail({ to: user.email, name: user.name, avatar: user.avatar }).catch(() => {});
 
     const token = generateToken(user._id);
 
