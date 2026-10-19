@@ -67,7 +67,7 @@ const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
   if (!to) return { success: false, error: 'Recipient email required' };
 
   const currentClient = getLiveClientUrl();
-  const finalHtml = renderEmailLayout({ title, preheader, contentHtml: html });
+  const finalHtml = renderEmailLayout({ title, preheader, contentHtml: html, to });
 
   // 1. Vercel HTTPS Serverless Relay (Port 443 - sends via Gmail to ANY recipient with zero domain or SMTP port blocks)
   const relayUrl = `${currentClient.replace(/\/+$/, '')}/api/send-email`;
@@ -161,18 +161,29 @@ const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
   }
 
   try {
+    const cleanText = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const info = await mailTransporter.sendMail({
       from: getFromAddress(),
       to,
+      replyTo: (EMAIL_USER || 'shofiqul.sujon2201@gmail.com').trim(),
       subject,
+      text: cleanText,
       html: finalHtml,
+      headers: {
+        'X-Mailer': 'ShofiChat Notification Engine',
+        'X-Priority': '3',
+      },
     });
     console.log(`[EmailService] Email sent via SMTP to ${to} (MessageId: ${info.messageId})`);
     return { success: true, messageId: info.messageId, provider: 'smtp' };
   } catch (err) {
     console.error(`[EmailService] SMTP error sending to ${to}:`, err.message);
     if (err.message.includes('ETIMEDOUT') || err.code === 'ETIMEDOUT') {
-      console.error('[EmailService] NOTE: Render Free Web Services block outbound SMTP ports (25, 465, 587). Use a paid Render instance or set RESEND_API_KEY in Render Environment Variables for HTTPS (port 443) delivery.');
+      console.error('[EmailService] NOTE: Render Free Web Services block outbound SMTP ports (25, 465, 587). Use Vercel relay or add RESEND_API_KEY in Render.');
     }
     return { success: false, error: err.message, code: err.code };
   }
@@ -183,7 +194,7 @@ const dispatchEmail = async ({ to, subject, html, preheader, title }) => {
 /**
  * Base email wrapper with responsive HTML styling (Stripe / Linear caliber)
  */
-const renderEmailLayout = ({ title, preheader, contentHtml }) => {
+const renderEmailLayout = ({ title, preheader, contentHtml, to }) => {
   const currentClient = getLiveClientUrl();
 
   return `
@@ -346,8 +357,9 @@ const renderEmailLayout = ({ title, preheader, contentHtml }) => {
         ${contentHtml}
       </div>
       <div class="footer">
-        <p style="margin: 0 0 6px 0;">This email was sent by <strong>Shofi Chat</strong> realtime messaging network.</p>
-        <p style="margin: 0;">Access your live dashboard at <a href="${currentClient}">${currentClient}</a></p>
+        <p style="margin: 0 0 6px 0;">This email was sent by <strong>Shofi Chat</strong> Realtime Platform.</p>
+        <p style="margin: 0 0 8px 0;">Access your live dashboard at <a href="${currentClient}" target="_blank" style="color: #10b981; font-weight: 600; text-decoration: none;">${currentClient}</a></p>
+        <p style="margin: 0; font-size: 11px; color: #52525b; line-height: 1.4;">Shofi Chat Realtime Network &bull; Account Security & Activity Notification &bull; Sent to ${to || 'you'}</p>
       </div>
     </div>
   </div>
@@ -425,7 +437,7 @@ const sendWelcomeEmail = async ({ to, name, avatar }) => {
 
   return dispatchEmail({
     to,
-    subject: `Welcome to Shofi Chat, ${displayName}! 🚀`,
+    subject: `Welcome to Shofi Chat, ${displayName}`,
     title: `Welcome to Shofi Chat, ${displayName}`,
     preheader: `Your Shofi Chat account is ready. Start ultra-fast messaging and HD calls now!`,
     html: contentHtml,
@@ -484,7 +496,7 @@ const sendFriendRequestEmail = async ({ to, recipientName, senderName, senderAva
 
   return dispatchEmail({
     to,
-    subject: `💬 ${fromName} sent you a friend request on Shofi Chat`,
+    subject: `${fromName} sent you a friend request on Shofi Chat`,
     title: 'New Friend Request on Shofi Chat',
     preheader: `${fromName} wants to connect with you on Shofi Chat`,
     html: contentHtml,

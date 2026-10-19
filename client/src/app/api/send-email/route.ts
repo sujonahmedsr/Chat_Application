@@ -30,11 +30,23 @@ export async function POST(request: Request) {
       },
     });
 
+    // Generate clean plain-text version for RFC multipart compliance (prevents spam flags)
+    const plainText = body.text || html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const mailOptions = {
       from: `"Shofi Chat" <${EMAIL_USER.trim()}>`,
       to,
+      replyTo: EMAIL_USER.trim(),
       subject,
+      text: plainText,
       html,
+      headers: {
+        'X-Mailer': 'ShofiChat Notification Engine',
+        'X-Priority': '3',
+      },
     };
 
     const info: any = await new Promise((resolve, reject) => {
