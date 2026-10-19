@@ -201,8 +201,9 @@ const googleOAuthCallback = async (req, res, next) => {
 
     const jwtToken = generateToken(user._id);
 
-    // Redirect user back to frontend with token
-    return res.redirect(`${targetClient}/?token=${jwtToken}`);
+    // Redirect user back to frontend with token and user profile for instant 0ms mobile render
+    const encodedUser = encodeURIComponent(JSON.stringify(userJson));
+    return res.redirect(`${targetClient}/?token=${jwtToken}&user=${encodedUser}`);
   } catch (err) {
     console.error('[Google OAuth Callback] Error:', err);
     return res.redirect(`${targetClient}/login?error=Google_auth_internal_error`);

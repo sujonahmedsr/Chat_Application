@@ -21,24 +21,8 @@ export default function LoginPage() {
     }
   }, []);
 
-  const [prefetchedGoogleUrl, setPrefetchedGoogleUrl] = useState<string>('');
-
-  // Pre-fetch Google OAuth 2.0 URL as soon as the login page loads for instant 0ms click redirect
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const currentOrigin = window.location.origin;
-      apiRequest(`/auth/google/url?client_url=${encodeURIComponent(currentOrigin)}`)
-        .then((data) => {
-          if (data?.hasClientId && data?.url) {
-            setPrefetchedGoogleUrl(data.url);
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
-
-  // Direct Google OAuth 2.0 Flow
-  const handleDirectGoogleLogin = async () => {
+  // Direct Instant Google OAuth 2.0 Flow (0ms Instant Redirect on Mobile & Desktop)
+  const handleDirectGoogleLogin = () => {
     try {
       setSubmitting(true);
       setError('');
@@ -46,25 +30,36 @@ export default function LoginPage() {
       // Pre-warm sound audio context and prompt notification once on user click
       initNotificationAndAudioOnce().catch(() => {});
 
-      // Instant redirect if already pre-warmed / prefetched (0ms latency!)
-      if (prefetchedGoogleUrl) {
-        window.location.href = prefetchedGoogleUrl;
-        return;
-      }
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://shofichat.vercel.app';
+      const isLocal =
+        currentOrigin.includes('localhost') ||
+        currentOrigin.includes('127.0.0.1') ||
+        currentOrigin.includes('192.168.') ||
+        currentOrigin.includes('10.');
 
-      // Fallback: Check backend for Direct Google OAuth 2.0 URL
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-      const data = await apiRequest(`/auth/google/url${currentOrigin ? `?client_url=${encodeURIComponent(currentOrigin)}` : ''}`);
-      if (data.hasClientId && data.url) {
-        window.location.href = data.url;
-        return;
-      }
+      const callbackUrl = isLocal
+        ? `${currentOrigin.replace(':3000', ':5000')}/api/auth/google/callback`
+        : 'https://chat-application-751k.onrender.com/api/auth/google/callback';
 
-      // If GOOGLE_CLIENT_ID is not configured in server/.env:
-      setError('গুগল লগইন চালু করতে server/.env ফাইলে GOOGLE_CLIENT_ID এবং GOOGLE_CLIENT_SECRET বসিয়ে সেভ করুন।');
+      const clientId =
+        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+        '185613213609-hlqa74b6c9j7j2ock3gvk38lonf8frfv.apps.googleusercontent.com';
+
+      const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
+      const options = {
+        redirect_uri: callbackUrl,
+        client_id: clientId,
+        access_type: 'offline',
+        response_type: 'code',
+        prompt: 'select_account',
+        scope: 'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        state: currentOrigin.replace(/\/+$/, ''),
+      };
+
+      const googleAuthUrl = `${rootUrl}?${new URLSearchParams(options).toString()}`;
+      window.location.href = googleAuthUrl;
     } catch (err: any) {
       setError(err.message || 'Failed to initiate Google sign-in');
-    } finally {
       setSubmitting(false);
     }
   };

@@ -35,23 +35,70 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('chat_user');
+        return cached ? JSON.parse(cached) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('chat_token');
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      // If user & token exist in cache, unlock UI in 0ms!
+      return !localStorage.getItem('chat_token') || !localStorage.getItem('chat_user');
+    }
+    return true;
+  });
 
   const refreshUser = async () => {
     try {
       let storedToken = typeof window !== 'undefined' ? localStorage.getItem('chat_token') : null;
+      let storedUser = typeof window !== 'undefined' ? localStorage.getItem('chat_user') : null;
 
-      // Extract OAuth callback token directly if present in URL
+      // Extract OAuth callback token and user payload directly if present in URL
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const urlToken = params.get('token');
+        const urlUser = params.get('user');
+
         if (urlToken) {
           storedToken = urlToken;
           localStorage.setItem('chat_token', urlToken);
+          setToken(urlToken);
+        }
+
+        if (urlUser) {
+          try {
+            const parsedUser = JSON.parse(decodeURIComponent(urlUser));
+            storedUser = JSON.stringify(parsedUser);
+            localStorage.setItem('chat_user', storedUser);
+            setUser(parsedUser);
+            setLoading(false); // 0ms instant display!
+          } catch (e) {}
+        }
+
+        if (urlToken || urlUser) {
           window.history.replaceState({}, '', window.location.pathname);
         }
+      }
+
+      if (storedUser && !user) {
+        try {
+          setUser(JSON.parse(storedUser));
+          setLoading(false);
+        } catch (e) {}
       }
 
       if (!storedToken) {
@@ -59,14 +106,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
         return;
       }
+
       setToken(storedToken);
+
+      // Background revalidation with /auth/me (stale-while-revalidate pattern)
       const data = await apiRequest('/auth/me');
-      setUser(data.user);
-    } catch (err) {
-      console.error('Failed to load current user:', err);
-      localStorage.removeItem('chat_token');
-      setToken(null);
-      setUser(null);
+      if (data?.user) {
+        setUser(data.user);
+        localStorage.setItem('chat_user', JSON.stringify(data.user));
+      }
+    } catch (err: any) {
+      console.warn('Session background validation notice:', err?.message || err);
+      // Only wipe session if server explicitly rejected with 401 Unauthorized
+      if (err instanceof Error && (err.message.includes('401') || err.message.includes('token') || err.message.includes('Authentication required'))) {
+        localStorage.removeItem('chat_token');
+        localStorage.removeItem('chat_user');
+        setToken(null);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -83,8 +140,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     localStorage.setItem('chat_token', data.token);
+    localStorage.setItem('chat_user', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
+    setLoading(false);
   };
 
   const googleLogin = async (payload: {
@@ -100,8 +159,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     localStorage.setItem('chat_token', data.token);
+    localStorage.setItem('chat_user', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
+    setLoading(false);
     return data.user;
   };
 
@@ -122,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     setUser(data.user);
+    localStorage.setItem('chat_user', JSON.stringify(data.user));
     return data.user;
   };
 
@@ -132,8 +194,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     localStorage.setItem('chat_token', data.token);
+    localStorage.setItem('chat_user', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
+    setLoading(false);
   };
 
   const logout = async () => {
@@ -143,8 +207,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Continue client cleanup even if network fails
     } finally {
       localStorage.removeItem('chat_token');
+      localStorage.removeItem('chat_user');
       setToken(null);
       setUser(null);
+      setLoading(false);
     }
   };
 

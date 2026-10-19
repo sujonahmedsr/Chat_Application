@@ -89,6 +89,16 @@ const startServer = async () => {
       console.log(`⚡ Socket.io enabled & listening`);
       console.log(`=========================================`);
     });
+
+    // Render 24/7 Keep-Alive: Ping health endpoint every 10 minutes to prevent cold starts
+    if (process.env.NODE_ENV === 'production') {
+      const keepAliveUrl = (process.env.SERVER_URL || 'https://chat-application-751k.onrender.com').replace(/\/+$/, '');
+      setInterval(async () => {
+        try {
+          await fetch(`${keepAliveUrl}/api/health`).catch(() => {});
+        } catch (e) {}
+      }, 10 * 60 * 1000); // 10 minutes
+    }
   } catch (error) {
     console.error('Fatal Server startup error:', error);
     process.exit(1);
