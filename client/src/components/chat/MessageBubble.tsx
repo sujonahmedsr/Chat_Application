@@ -14,7 +14,6 @@ import {
   ExternalLink,
   Copy,
   Pencil,
-  X,
   FileText,
   Download,
 } from 'lucide-react';

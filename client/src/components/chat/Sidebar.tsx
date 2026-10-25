@@ -13,7 +13,6 @@ import {
   UserCheck,
   ShieldAlert,
   Settings,
-  MoreVertical,
 } from 'lucide-react';
 import { User, Group } from '@/types';
 import { Avatar } from '../ui/Avatar';
@@ -89,23 +88,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, []);
 
-  const handleToggleNotification = async () => {
-    if (!isNotificationSupported()) {
-      console.warn('Desktop notifications are not supported in this browser.');
-      return;
-    }
-
-    if (notificationStatus === 'granted') {
-      playNotificationSound();
-      return;
-    }
-
-    const granted = await requestNotificationPermission();
-    setNotificationStatus(granted ? 'granted' : 'denied');
-    if (granted) {
-      playNotificationSound();
-    }
-  };
 
   const filteredUsers = users.filter((u) => {
     const q = searchQuery.toLowerCase().trim();

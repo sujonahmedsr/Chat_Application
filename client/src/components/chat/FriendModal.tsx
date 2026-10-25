@@ -627,7 +627,7 @@ export const FriendModal: React.FC<FriendModalProps> = ({
                             </span>
                           ) : user.hasSentRequest ? (
                             <span className="inline-flex items-center gap-1 text-[11px] text-amber-400 font-medium px-2.5 py-1 bg-amber-950/40 rounded-lg border border-amber-800/30">
-                              <Clock className="w-3 h-3 animate-spin" style={{ animationDuration: '4s' }} />
+                              <Clock className="w-3 h-3" />
                               Pending
                             </span>
                           ) : user.hasReceivedRequest ? (

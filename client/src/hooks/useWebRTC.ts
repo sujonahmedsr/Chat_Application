@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '@/context/SocketContext';
 import { CallState, IncomingCallData, User } from '@/types';
 import { sounds } from '@/lib/sound';
-import { getWebRtcConfiguration, DEFAULT_ICE_SERVERS } from '@/lib/webrtc';
+import { getWebRtcConfiguration } from '@/lib/webrtc';
 
 /**
  * Universal ID extractor for MongoDB / Frontend User objects

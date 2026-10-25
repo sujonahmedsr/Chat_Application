@@ -18,7 +18,6 @@ import {
   Lock,
 } from 'lucide-react';
 import { User as UserType } from '@/types';
-import { Avatar } from '../ui/Avatar';
 import { apiRequest } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 

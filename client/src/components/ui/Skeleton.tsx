@@ -88,13 +88,3 @@ export const ChatAreaSkeleton: React.FC = () => {
   );
 };
 
-// ===== CONTACT INFO SKELETON (Profile header while loading) =====
-export const ContactInfoSkeleton: React.FC = () => (
-  <div className="flex items-center gap-3 p-3">
-    <Skeleton className="w-10 h-10 rounded-full" />
-    <div className="space-y-1.5 flex-1">
-      <Skeleton className="w-28 h-3.5 rounded-full" />
-      <Skeleton className="w-16 h-2.5 rounded-full opacity-60" />
-    </div>
-  </div>
-);

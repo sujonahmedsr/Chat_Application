@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/context/SocketContext';
@@ -42,7 +41,6 @@ const extractId = (val: any): string => {
 export default function ChatDashboard() {
   const { user: currentUser, loading: authLoading, logout, updateProfile, refreshUser } = useAuth();
   const { socket, onlineUserIds } = useSocket();
-  const router = useRouter();
 
   // State
   const [users, setUsers] = useState<User[]>([]);
@@ -919,7 +917,7 @@ export default function ChatDashboard() {
       refreshUser();
     };
 
-    const handleUnblocked = ({ userId }: { userId: string }) => {
+    const handleUnblocked = () => {
       refreshUser();
       fetchFriends();
     };
@@ -1111,7 +1109,7 @@ export default function ChatDashboard() {
       setMessages((prev) =>
         prev.map((m) =>
           extractId(m.id || (m as any)._id) === targetId
-            ? { ...m, content, isEdited: true, editedAt }
+            ? { ...m, content, isEdited: isEdited ?? true, editedAt }
             : m
         )
       );

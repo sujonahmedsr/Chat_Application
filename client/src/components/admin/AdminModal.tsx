@@ -11,9 +11,6 @@ import {
   AlertTriangle,
   RefreshCw,
   LogOut,
-  ToggleLeft,
-  ToggleRight,
-  Sparkles,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Avatar } from '../ui/Avatar';

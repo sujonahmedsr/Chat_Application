@@ -56,10 +56,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      // If user & token exist in cache, unlock UI in 0ms!
-      return !localStorage.getItem('chat_token') || !localStorage.getItem('chat_user');
+      const storedToken = localStorage.getItem('chat_token');
+      const storedUser = localStorage.getItem('chat_user');
+      // Only show initializing loader if token exists but user profile is not cached yet
+      if (storedToken && !storedUser) {
+        return true;
+      }
+      return false;
     }
-    return true;
+    return false;
   });
 
   const refreshUser = async () => {

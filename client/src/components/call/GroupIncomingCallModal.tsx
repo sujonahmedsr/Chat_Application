@@ -3,7 +3,6 @@
 import React from 'react';
 import { Phone, PhoneOff, Users } from 'lucide-react';
 import { IncomingGroupCallData } from '@/hooks/useGroupCall';
-import { Avatar } from '../ui/Avatar';
 
 interface GroupIncomingCallModalProps {
   incomingCall: IncomingGroupCallData | null;

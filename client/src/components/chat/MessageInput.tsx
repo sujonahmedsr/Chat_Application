@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Send,
   Smile,
   Mic,
   Trash2,

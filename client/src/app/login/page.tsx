@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
-import { apiRequest } from '@/lib/api';
 import { initNotificationAndAudioOnce } from '@/lib/notification';
 
 export default function LoginPage() {
