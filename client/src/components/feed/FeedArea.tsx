@@ -303,10 +303,8 @@ export const FeedArea: React.FC<FeedAreaProps> = ({
     }
   };
 
-  // Handle Delete Post
+  // Handle Delete Post (Confirmation is already handled by custom DeleteConfirmModal)
   const handleDeletePost = async (postId: string) => {
-    if (!confirm('Are you sure you want to delete this post?')) return;
-
     setPosts((prev) => prev.filter((p) => p.id !== postId));
 
     try {
