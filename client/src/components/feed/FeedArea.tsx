@@ -586,14 +586,15 @@ export const FeedArea: React.FC<FeedAreaProps> = ({
                   onStartChat={onStartChat}
                   onOpenProfile={(author) => setSelectedProfileUser(author)}
                   onOpenImageLightbox={(url) => setLightboxImage(url)}
+                  onSelectTag={(tag) => setActiveTag(tag || null)}
                   isDarkMode={isDarkMode}
                 />
               ))
             )}
           </div>
 
-          {/* Right Companion Widgets Column (Trending Topics, Online Now, Quick Actions) */}
-          <div className="hidden lg:block">
+          {/* Right Companion Widgets Column (Sticky on scroll) */}
+          <div className="hidden lg:block w-80 flex-shrink-0 sticky top-2 self-start">
             <FeedWidgets
               onlineFriends={onlineFriends}
               activeTag={activeTag}

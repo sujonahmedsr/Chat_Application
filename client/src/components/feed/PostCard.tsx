@@ -11,9 +11,9 @@ import {
   MoreVertical,
   ExternalLink,
   Globe,
-  Clock,
+  Tag,
 } from 'lucide-react';
-import { Post, PostComment, User } from '@/types';
+import { Post, User } from '@/types';
 import { Avatar } from '../ui/Avatar';
 import { CommentsSection } from './CommentsSection';
 
@@ -31,6 +31,7 @@ interface PostCardProps {
   onStartChat: (user: User) => void;
   onOpenProfile: (user: User) => void;
   onOpenImageLightbox: (imageUrl: string) => void;
+  onSelectTag?: (tag: string) => void;
   isDarkMode?: boolean;
 }
 
@@ -46,6 +47,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   onStartChat,
   onOpenProfile,
   onOpenImageLightbox,
+  onSelectTag,
   isDarkMode = true,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
@@ -89,6 +91,49 @@ export const PostCard: React.FC<PostCardProps> = ({
     post.commentsCount !== undefined
       ? post.commentsCount
       : (post.comments || []).length;
+
+  // Helper to format URLs and Hashtags as clickable elements
+  const renderFormattedBody = (text: string) => {
+    if (!text) return null;
+    const tokenRegex = /(https?:\/\/[^\s]+|#[a-zA-Z0-9_\u0980-\u09FF]+)/g;
+    const parts = text.split(tokenRegex);
+
+    return parts.map((part, idx) => {
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        return (
+          <a
+            key={idx}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-500 hover:text-emerald-400 underline font-medium inline-flex items-center gap-0.5 break-all"
+            onClick={(e) => e.stopPropagation()}
+            title="Open link in new tab"
+          >
+            <span>{part}</span>
+            <ExternalLink className="w-3 h-3 inline-block ml-0.5 opacity-80" />
+          </a>
+        );
+      }
+      if (part.startsWith('#')) {
+        return (
+          <button
+            key={idx}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectTag?.(part);
+            }}
+            className="text-teal-400 hover:text-teal-300 font-semibold hover:underline"
+            title={`Filter by ${part}`}
+          >
+            {part}
+          </button>
+        );
+      }
+      return <React.Fragment key={idx}>{part}</React.Fragment>;
+    });
+  };
 
   return (
     <div
@@ -203,32 +248,59 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
       </div>
 
-      {/* Content Text */}
-      <p
+      {/* Blog / Article Heading (if present) */}
+      {post.title && (
+        <h3
+          className={`text-base sm:text-lg font-bold tracking-tight mb-2 leading-snug ${
+            isDarkMode ? 'text-white' : 'text-slate-900'
+          }`}
+        >
+          {post.title}
+        </h3>
+      )}
+
+      {/* Content Text with clickable links and hashtags */}
+      <div
         className={`text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words mb-3.5 select-text ${
           isDarkMode ? 'text-neutral-200' : 'text-slate-700'
         }`}
       >
-        {post.content}
-      </p>
+        {renderFormattedBody(post.content)}
+      </div>
 
-      {/* Post Image (Clickable Lightbox) */}
+      {/* Post Tags Chips (if present) */}
+      {post.tags && post.tags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
+          {post.tags.map((tag, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onSelectTag?.(tag)}
+              className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Square Post Image (Clickable Lightbox) */}
       {post.imageUrl && (
         <div
           onClick={() => onOpenImageLightbox(post.imageUrl!)}
-          className={`relative mb-3.5 rounded-2xl overflow-hidden border cursor-pointer group/img ${
+          className={`relative mb-3.5 rounded-2xl overflow-hidden border cursor-pointer aspect-square w-full max-w-lg mx-auto ${
             isDarkMode
-              ? 'bg-neutral-950/80 border-neutral-800'
-              : 'bg-slate-50 border-slate-200'
+              ? 'bg-neutral-950 border-neutral-800'
+              : 'bg-slate-100 border-slate-200'
           }`}
         >
           <img
             src={post.imageUrl}
-            alt="Post media"
+            alt="Square post media"
             loading="lazy"
-            className="w-full max-h-[480px] object-cover group-hover/img:scale-[1.01] transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
           />
-          <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/25 flex items-center justify-center transition-all opacity-0 group-hover/img:opacity-100">
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100">
             <span className="px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[11px] font-semibold text-white flex items-center gap-1.5 shadow-lg">
               <ExternalLink className="w-3.5 h-3.5" />
               <span>View Full Photo</span>

@@ -35,12 +35,24 @@ const postSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    title: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 300,
+    },
     content: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 5000,
+      maxlength: 8000,
     },
+    tags: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     imageUrl: {
       type: String,
       default: '',
@@ -85,5 +97,6 @@ const postSchema = new mongoose.Schema(
 
 postSchema.index({ createdAt: -1 });
 postSchema.index({ author: 1, createdAt: -1 });
+postSchema.index({ tags: 1 });
 
 module.exports = mongoose.model('Post', postSchema);

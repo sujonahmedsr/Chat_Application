@@ -101,7 +101,9 @@ export interface PostComment {
 export interface Post {
   id: string;
   author: User;
+  title?: string;
   content: string;
+  tags?: string[];
   imageUrl?: string;
   likesCount: number;
   dislikesCount: number;

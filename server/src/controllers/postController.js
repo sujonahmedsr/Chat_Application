@@ -3,6 +3,13 @@ const User = require('../models/User');
 const { uploadFeedImage } = require('../utils/imageUpload');
 const { isSuperAdminEmail } = require('../utils/superAdmin');
 
+const extractHashtags = (text) => {
+  if (!text) return [];
+  const matches = text.match(/#([a-zA-Z0-9_\u0980-\u09FF]+)/g);
+  if (!matches) return [];
+  return [...new Set(matches.map((m) => m.toLowerCase()))];
+};
+
 const formatPostForUser = (post, currentUserId) => {
   const json = post.toJSON ? post.toJSON() : { ...post };
   const uidStr = String(currentUserId || '');
@@ -43,6 +50,13 @@ const getPosts = async (req, res, next) => {
       filterQuery.author = req.query.authorId;
     }
 
+    if (req.query.tag) {
+      const tagQuery = req.query.tag.startsWith('#')
+        ? req.query.tag.toLowerCase()
+        : `#${req.query.tag.toLowerCase()}`;
+      filterQuery.tags = tagQuery;
+    }
+
     const posts = await Post.find(filterQuery)
       .populate('author', 'name email avatar bio isOnline lastSeen role')
       .populate('comments.user', 'name email avatar role')
@@ -64,11 +78,11 @@ const getPosts = async (req, res, next) => {
   }
 };
 
-// POST /api/posts - Create a new feed post
+// POST /api/posts - Create a new feed post (Blog / Facebook style)
 const createPost = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const { content, image } = req.body;
+    const { title, content, image, tags } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Post content cannot be empty' });
@@ -79,9 +93,18 @@ const createPost = async (req, res, next) => {
       imageUrl = await uploadFeedImage(image, 'shofi_chat_feed');
     }
 
+    // Combine explicit tags with extracted hashtags from content and title
+    const contentTags = extractHashtags(`${title || ''} ${content}`);
+    const inputTags = Array.isArray(tags)
+      ? tags.map((t) => (t.startsWith('#') ? t.toLowerCase() : `#${t.toLowerCase()}`))
+      : [];
+    const mergedTags = [...new Set([...inputTags, ...contentTags])];
+
     const post = await Post.create({
       author: currentUserId,
+      title: title ? title.trim() : '',
       content: content.trim(),
+      tags: mergedTags,
       imageUrl,
       likes: [],
       dislikes: [],
@@ -114,7 +137,7 @@ const updatePost = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
     const { id: postId } = req.params;
-    const { content, image } = req.body;
+    const { title, content, image, tags } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Post content cannot be empty' });
@@ -133,6 +156,16 @@ const updatePost = async (req, res, next) => {
     }
 
     post.content = content.trim();
+    if (title !== undefined) {
+      post.title = title ? title.trim() : '';
+    }
+
+    const contentTags = extractHashtags(`${post.title} ${post.content}`);
+    const inputTags = Array.isArray(tags)
+      ? tags.map((t) => (t.startsWith('#') ? t.toLowerCase() : `#${t.toLowerCase()}`))
+      : post.tags || [];
+    post.tags = [...new Set([...inputTags, ...contentTags])];
+
     post.isEdited = true;
     post.editedAt = new Date();
 

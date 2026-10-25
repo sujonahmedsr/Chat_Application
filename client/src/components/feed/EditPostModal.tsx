@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, Image as ImageIcon, Loader2, Check } from 'lucide-react';
+import { X, Image as ImageIcon, Loader2, Check, Heading } from 'lucide-react';
 import { Post } from '@/types';
 import { apiRequest } from '@/lib/api';
 
@@ -20,6 +20,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   onPostUpdated,
   isDarkMode = true,
 }) => {
+  const [title, setTitle] = useState(post?.title || '');
   const [content, setContent] = useState(post?.content || '');
   const [imagePreview, setImagePreview] = useState<string | null>(post?.imageUrl || null);
   const [hasChangedImage, setHasChangedImage] = useState(false);
@@ -29,6 +30,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
   React.useEffect(() => {
     if (post) {
+      setTitle(post.title || '');
       setContent(post.content || '');
       setImagePreview(post.imageUrl || null);
       setHasChangedImage(false);
@@ -81,6 +83,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setError('');
 
       const bodyPayload: any = {
+        title: title.trim(),
         content: content.trim(),
       };
 
@@ -116,13 +119,13 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-neutral-800/80 mb-4">
           <div>
-            <h3 className="text-base font-bold tracking-tight">Edit Post</h3>
+            <h3 className="text-base font-bold tracking-tight">Edit Post / Article</h3>
             <p
               className={`text-xs ${
                 isDarkMode ? 'text-neutral-400' : 'text-slate-500'
               }`}
             >
-              Update your caption or photo
+              Update your heading, content, or square photo
             </p>
           </div>
           <button
@@ -139,20 +142,44 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Title */}
           <div>
             <label
               className={`block text-xs font-semibold mb-1.5 ${
                 isDarkMode ? 'text-neutral-300' : 'text-slate-700'
               }`}
             >
-              Post Content
+              Heading / Title (optional)
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Article heading..."
+              maxLength={250}
+              className={`w-full font-bold text-sm rounded-2xl py-2 px-3.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all ${
+                isDarkMode
+                  ? 'bg-neutral-950/80 border border-neutral-800 text-white placeholder-neutral-500'
+                  : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400'
+              }`}
+            />
+          </div>
+
+          {/* Content */}
+          <div>
+            <label
+              className={`block text-xs font-semibold mb-1.5 ${
+                isDarkMode ? 'text-neutral-300' : 'text-slate-700'
+              }`}
+            >
+              Post Content (URLs & #tags become clickable links)
             </label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={4}
               placeholder="What would you like to update?"
-              className={`w-full rounded-2xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none transition-all ${
+              className={`w-full rounded-2xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none transition-all ${
                 isDarkMode
                   ? 'bg-neutral-950/80 border border-neutral-800 text-neutral-100 placeholder-neutral-500'
                   : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400'
@@ -160,7 +187,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
             />
           </div>
 
-          {/* Image preview & change */}
+          {/* Square Image preview & change */}
           <div>
             <input
               type="file"
@@ -172,11 +199,13 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
             {imagePreview ? (
               <div className="relative inline-block mt-1">
-                <img
-                  src={imagePreview}
-                  alt="Post preview"
-                  className="max-h-48 rounded-2xl object-cover border border-neutral-700/60 shadow"
-                />
+                <div className="w-44 h-44 aspect-square rounded-2xl overflow-hidden border border-neutral-700/60 shadow bg-neutral-950">
+                  <img
+                    src={imagePreview}
+                    alt="Square post preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={handleRemoveImage}
@@ -185,6 +214,9 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+                <span className="block text-[10px] text-neutral-400 mt-1 font-medium">
+                  Square 1:1 format
+                </span>
               </div>
             ) : (
               <button
@@ -197,7 +229,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                 }`}
               >
                 <ImageIcon className="w-4 h-4 text-emerald-500" />
-                <span>Add / Replace Photo</span>
+                <span>Add / Replace Square Photo</span>
               </button>
             )}
           </div>
