@@ -6,12 +6,16 @@ import {
   ThumbsDown,
   MessageSquare,
   Trash2,
+  Edit3,
   ShieldCheck,
   MoreVertical,
   ExternalLink,
+  Globe,
+  Clock,
 } from 'lucide-react';
-import { Post, User } from '@/types';
+import { Post, PostComment, User } from '@/types';
 import { Avatar } from '../ui/Avatar';
+import { CommentsSection } from './CommentsSection';
 
 const SUPER_ADMINS = ['shofiqul.sujon2201@gmail.com'];
 
@@ -21,9 +25,13 @@ interface PostCardProps {
   onLike: (postId: string) => void;
   onDislike: (postId: string) => void;
   onDelete: (postId: string) => void;
+  onEdit: (post: Post) => void;
+  onAddComment: (postId: string, content: string) => Promise<void>;
+  onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onStartChat: (user: User) => void;
   onOpenProfile: (user: User) => void;
   onOpenImageLightbox: (imageUrl: string) => void;
+  isDarkMode?: boolean;
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
@@ -32,11 +40,16 @@ export const PostCard: React.FC<PostCardProps> = ({
   onLike,
   onDislike,
   onDelete,
+  onEdit,
+  onAddComment,
+  onDeleteComment,
   onStartChat,
   onOpenProfile,
   onOpenImageLightbox,
+  isDarkMode = true,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const author = post.author;
   const authorId = author ? String(author.id || (author as any)._id) : '';
@@ -46,6 +59,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isSuper =
     SUPER_ADMINS.includes((currentUser?.email || '').toLowerCase()) ||
     currentUser?.role === 'admin';
+  const canEdit = isAuthor || isSuper;
   const canDelete = isAuthor || isSuper;
 
   const isAuthorSuperAdmin =
@@ -71,10 +85,21 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
+  const commentsCount =
+    post.commentsCount !== undefined
+      ? post.commentsCount
+      : (post.comments || []).length;
+
   return (
-    <div className="w-full bg-neutral-900/80 hover:bg-neutral-900 border border-neutral-800 rounded-3xl p-4 sm:p-5 shadow-lg backdrop-blur-md transition-all text-neutral-100 relative group">
-      {/* Header: Author Info */}
-      <div className="flex items-center justify-between mb-3">
+    <div
+      className={`w-full rounded-3xl p-5 sm:p-6 shadow-sm border transition-all relative group ${
+        isDarkMode
+          ? 'bg-neutral-900/90 border-neutral-800 text-white'
+          : 'bg-white border-slate-200/90 text-slate-900'
+      }`}
+    >
+      {/* Header: Author info + Options */}
+      <div className="flex items-center justify-between mb-3.5">
         <div
           onClick={() => author && onOpenProfile(author)}
           className="flex items-center gap-3 cursor-pointer group/author"
@@ -92,7 +117,13 @@ export const PostCard: React.FC<PostCardProps> = ({
 
           <div>
             <div className="flex items-center gap-1.5">
-              <h4 className="text-xs sm:text-sm font-bold text-white group-hover/author:text-emerald-400 transition-colors">
+              <h4
+                className={`text-sm font-bold transition-colors ${
+                  isDarkMode
+                    ? 'text-white group-hover/author:text-emerald-400'
+                    : 'text-slate-900 group-hover/author:text-emerald-600'
+                }`}
+              >
                 {author?.name || 'Anonymous User'}
               </h4>
               {isAuthorSuperAdmin && (
@@ -101,43 +132,83 @@ export const PostCard: React.FC<PostCardProps> = ({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-neutral-500">
-              {formatTimestamp(post.createdAt)}
-            </p>
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+              <span>{formatTimestamp(post.createdAt)}</span>
+              {post.isEdited && (
+                <span className="italic text-emerald-500 font-medium">
+                  • edited
+                </span>
+              )}
+              <span>•</span>
+              <Globe className="w-3 h-3 text-neutral-400" />
+            </div>
           </div>
         </div>
 
         {/* Post Options Menu */}
         <div className="relative">
-          {canDelete && (
+          {(canEdit || canDelete) && (
             <button
               onClick={() => setShowMenu((prev) => !prev)}
-              className="p-1.5 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              className={`p-1.5 rounded-xl transition-colors ${
+                isDarkMode
+                  ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+              }`}
               title="Post Options"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
           )}
 
-          {showMenu && canDelete && (
-            <div className="absolute right-0 top-8 z-20 w-36 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl py-1.5 animate-in fade-in zoom-in-95">
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onDelete(post.id);
-                }}
-                className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Post</span>
-              </button>
+          {showMenu && (canEdit || canDelete) && (
+            <div
+              className={`absolute right-0 top-8 z-30 w-36 rounded-2xl shadow-xl py-1.5 border animate-in fade-in zoom-in-95 ${
+                isDarkMode
+                  ? 'bg-neutral-900 border-neutral-800 text-neutral-200'
+                  : 'bg-white border-slate-200 text-slate-700'
+              }`}
+            >
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onEdit(post);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors ${
+                    isDarkMode
+                      ? 'hover:bg-neutral-800 text-neutral-200'
+                      : 'hover:bg-slate-100 text-slate-800'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Edit Post</span>
+                </button>
+              )}
+
+              {canDelete && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onDelete(post.id);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Post</span>
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
 
       {/* Content Text */}
-      <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed whitespace-pre-wrap break-words mb-3 select-text">
+      <p
+        className={`text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words mb-3.5 select-text ${
+          isDarkMode ? 'text-neutral-200' : 'text-slate-700'
+        }`}
+      >
         {post.content}
       </p>
 
@@ -145,33 +216,43 @@ export const PostCard: React.FC<PostCardProps> = ({
       {post.imageUrl && (
         <div
           onClick={() => onOpenImageLightbox(post.imageUrl!)}
-          className="relative mb-3.5 rounded-2xl overflow-hidden bg-neutral-950/80 border border-neutral-800 cursor-pointer group/img"
+          className={`relative mb-3.5 rounded-2xl overflow-hidden border cursor-pointer group/img ${
+            isDarkMode
+              ? 'bg-neutral-950/80 border-neutral-800'
+              : 'bg-slate-50 border-slate-200'
+          }`}
         >
           <img
             src={post.imageUrl}
             alt="Post media"
             loading="lazy"
-            className="w-full max-h-[460px] object-cover group-hover/img:scale-[1.01] transition-transform duration-300"
+            className="w-full max-h-[480px] object-cover group-hover/img:scale-[1.01] transition-transform duration-300"
           />
-          <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 flex items-center justify-center transition-all opacity-0 group-hover/img:opacity-100">
-            <span className="px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-[11px] font-medium text-white flex items-center gap-1.5 shadow-lg">
+          <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/25 flex items-center justify-center transition-all opacity-0 group-hover/img:opacity-100">
+            <span className="px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-[11px] font-semibold text-white flex items-center gap-1.5 shadow-lg">
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>Click to view full photo</span>
+              <span>View Full Photo</span>
             </span>
           </div>
         </div>
       )}
 
-      {/* Bottom Action Bar: Like, Dislike, and Message Author */}
-      <div className="flex items-center justify-between pt-2.5 border-t border-neutral-800/80">
-        <div className="flex items-center gap-1.5 sm:gap-2">
+      {/* Action Bar */}
+      <div
+        className={`flex items-center justify-between pt-3 border-t ${
+          isDarkMode ? 'border-neutral-800/80' : 'border-slate-100'
+        }`}
+      >
+        <div className="flex items-center gap-2">
           {/* LIKE BUTTON */}
           <button
             onClick={() => onLike(post.id)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
               post.isLiked
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
-                : 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/40'
+                : isDarkMode
+                ? 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/40'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
             }`}
             title="Like"
           >
@@ -187,7 +268,9 @@ export const PostCard: React.FC<PostCardProps> = ({
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
               post.isDisliked
                 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm'
-                : 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/40'
+                : isDarkMode
+                ? 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/40'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
             }`}
             title="Dislike"
           >
@@ -196,20 +279,54 @@ export const PostCard: React.FC<PostCardProps> = ({
             />
             <span>{post.dislikesCount || 0}</span>
           </button>
+
+          {/* COMMENTS TOGGLE BUTTON */}
+          <button
+            onClick={() => setShowComments((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
+              showComments
+                ? 'bg-teal-500/20 text-teal-400 border border-teal-500/40 shadow-sm'
+                : isDarkMode
+                ? 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/40'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+            }`}
+            title="Comments"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+            <span>{commentsCount}</span>
+          </button>
         </div>
 
         {/* CHAT / MESSAGE AUTHOR BUTTON */}
         {!isAuthor && author && (
           <button
             onClick={() => onStartChat(author)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/80 hover:bg-emerald-600 text-neutral-300 hover:text-white text-xs font-medium border border-neutral-700/60 hover:border-emerald-500/50 shadow-sm transition-all active:scale-95 group/chat"
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 border ${
+              isDarkMode
+                ? 'bg-neutral-800/80 hover:bg-emerald-600 text-neutral-200 hover:text-white border-neutral-700/60 hover:border-emerald-500'
+                : 'bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white border-slate-200 hover:border-emerald-500'
+            }`}
             title={`Message ${author.name}`}
           >
-            <MessageSquare className="w-3.5 h-3.5 text-emerald-400 group-hover/chat:text-white" />
-            <span>Chat</span>
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Chat with {author.name?.split(' ')[0]}</span>
           </button>
         )}
       </div>
+
+      {/* Expandable Comments Section */}
+      {showComments && (
+        <CommentsSection
+          postId={post.id}
+          postAuthorId={authorId}
+          comments={post.comments || []}
+          currentUser={currentUser}
+          onAddComment={onAddComment}
+          onDeleteComment={onDeleteComment}
+          onOpenProfile={onOpenProfile}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 };

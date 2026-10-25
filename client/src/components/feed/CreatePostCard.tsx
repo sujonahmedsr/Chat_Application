@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Image as ImageIcon, Send, X, Loader2, Sparkles } from 'lucide-react';
+import { Image as ImageIcon, Send, X, Loader2, Sparkles, Smile } from 'lucide-react';
 import { User } from '@/types';
 import { Avatar } from '../ui/Avatar';
 import { apiRequest } from '@/lib/api';
@@ -9,11 +9,13 @@ import { apiRequest } from '@/lib/api';
 interface CreatePostCardProps {
   currentUser: User | null;
   onPostCreated: (post: any) => void;
+  isDarkMode?: boolean;
 }
 
 export const CreatePostCard: React.FC<CreatePostCardProps> = ({
   currentUser,
   onPostCreated,
+  isDarkMode = true,
 }) => {
   const [content, setContent] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -79,10 +81,18 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
     }
   };
 
+  const firstName = currentUser?.name?.split(' ')[0] || 'friend';
+
   return (
-    <div className="w-full bg-neutral-900/90 border border-neutral-800 rounded-3xl p-4 sm:p-5 shadow-xl backdrop-blur-xl relative overflow-hidden transition-all">
+    <div
+      className={`w-full rounded-3xl p-5 sm:p-6 shadow-sm border transition-colors ${
+        isDarkMode
+          ? 'bg-neutral-900/90 border-neutral-800 text-white'
+          : 'bg-white border-slate-200/90 text-slate-900'
+      }`}
+    >
       <form onSubmit={handleSubmit}>
-        <div className="flex gap-3">
+        <div className="flex items-start gap-3.5">
           <Avatar
             name={currentUser?.name || 'User'}
             avatar={currentUser?.avatar}
@@ -90,26 +100,44 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
           />
 
           <div className="flex-1 min-w-0">
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={`What's on your mind, ${currentUser?.name?.split(' ')[0] || 'friend'}?`}
-              rows={2}
-              className="w-full bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-3 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/20 resize-none transition-all"
-            />
+            <div className="relative">
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder={`What's on your mind, ${firstName}?`}
+                rows={2}
+                className={`w-full rounded-2xl p-3.5 pr-10 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none transition-all ${
+                  isDarkMode
+                    ? 'bg-neutral-950/70 border border-neutral-800 text-neutral-100 placeholder-neutral-500'
+                    : 'bg-slate-50 border border-slate-200 text-slate-800 placeholder-slate-400'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setContent((prev) => prev + ' 😊')}
+                className={`absolute right-3 top-3 p-1 rounded-lg transition-colors ${
+                  isDarkMode
+                    ? 'text-neutral-500 hover:text-neutral-300'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+                title="Add emoji"
+              >
+                <Smile className="w-4 h-4" />
+              </button>
+            </div>
 
             {/* Selected Image Preview with remove option */}
             {imagePreview && (
-              <div className="relative mt-2.5 inline-block group">
+              <div className="relative mt-3 inline-block group">
                 <img
                   src={imagePreview}
                   alt="Upload preview"
-                  className="max-h-56 max-w-full rounded-2xl object-cover border border-neutral-700 shadow-md"
+                  className="max-h-56 max-w-full rounded-2xl object-cover border border-neutral-700/60 shadow-md"
                 />
                 <button
                   type="button"
                   onClick={handleRemoveImage}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/75 hover:bg-black text-neutral-200 hover:text-white transition-all shadow-lg"
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/80 hover:bg-black text-white transition-all shadow-lg"
                   title="Remove image"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -118,11 +146,15 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
             )}
 
             {error && (
-              <p className="text-[11px] text-rose-400 mt-2 font-medium">{error}</p>
+              <p className="text-[11px] text-rose-500 mt-2 font-medium">{error}</p>
             )}
 
-            {/* Action Bar */}
-            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-neutral-800/80">
+            {/* Bottom Action Bar */}
+            <div
+              className={`flex items-center justify-between mt-3.5 pt-3 border-t ${
+                isDarkMode ? 'border-neutral-800/80' : 'border-slate-100'
+              }`}
+            >
               <div>
                 <input
                   type="file"
@@ -134,17 +166,21 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300 hover:text-white text-xs font-medium border border-neutral-700/60 transition-colors"
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
+                    isDarkMode
+                      ? 'bg-neutral-800/80 hover:bg-neutral-800 text-neutral-200 border-neutral-700/60'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
                 >
-                  <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Photo</span>
+                  <ImageIcon className="w-4 h-4 text-emerald-500" />
+                  <span>Add Image</span>
                 </button>
               </div>
 
               <button
                 type="submit"
                 disabled={submitting || (!content.trim() && !imagePreview)}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all active:scale-95"
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-emerald-950/30 transition-all active:scale-95"
               >
                 {submitting ? (
                   <>
@@ -153,8 +189,8 @@ export const CreatePostCard: React.FC<CreatePostCardProps> = ({
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Post</span>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Publish Post</span>
                   </>
                 )}
               </button>

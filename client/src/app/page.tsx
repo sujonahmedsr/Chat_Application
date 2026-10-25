@@ -1259,6 +1259,9 @@ export default function ChatDashboard() {
         ) : (
           <FeedArea
             currentUser={currentUser}
+            onlineFriends={users.filter((u) => u.isOnline)}
+            onOpenCreateGroup={() => setShowCreateGroup(true)}
+            onOpenFriendModal={() => setShowFriendModal(true)}
             onStartChat={(targetUser) => {
               handleSelectUser(targetUser);
               setIsMobileChatOpen(true);

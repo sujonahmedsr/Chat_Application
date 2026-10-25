@@ -90,6 +90,14 @@ export interface IncomingCallData {
   offer: RTCSessionDescriptionInit;
 }
 
+export interface PostComment {
+  id: string;
+  _id?: string;
+  user: User;
+  content: string;
+  createdAt: string;
+}
+
 export interface Post {
   id: string;
   author: User;
@@ -97,8 +105,12 @@ export interface Post {
   imageUrl?: string;
   likesCount: number;
   dislikesCount: number;
+  commentsCount?: number;
+  comments?: PostComment[];
   isLiked?: boolean;
   isDisliked?: boolean;
+  isEdited?: boolean;
+  editedAt?: string;
   createdAt: string;
   updatedAt?: string;
 }

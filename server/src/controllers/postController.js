@@ -9,17 +9,26 @@ const formatPostForUser = (post, currentUserId) => {
 
   const likesArray = json.likes || [];
   const dislikesArray = json.dislikes || [];
+  const commentsArray = json.comments || [];
 
   return {
     ...json,
     likesCount: likesArray.length,
     dislikesCount: dislikesArray.length,
+    commentsCount: commentsArray.length,
     isLiked: likesArray.some((id) => String(id) === uidStr),
     isDisliked: dislikesArray.some((id) => String(id) === uidStr),
+    comments: commentsArray.map((c) => {
+      const cJson = c.toJSON ? c.toJSON() : { ...c };
+      return {
+        ...cJson,
+        id: cJson.id || cJson._id,
+      };
+    }),
   };
 };
 
-// GET /api/posts - Fetch public news feed
+// GET /api/posts - Fetch public news feed or filtered "My Posts"
 const getPosts = async (req, res, next) => {
   try {
     const currentUserId = req.user ? req.user._id : null;
@@ -27,13 +36,21 @@ const getPosts = async (req, res, next) => {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const skip = (page - 1) * limit;
 
-    const posts = await Post.find()
+    const filterQuery = {};
+    if (req.query.filter === 'my' && currentUserId) {
+      filterQuery.author = currentUserId;
+    } else if (req.query.authorId) {
+      filterQuery.author = req.query.authorId;
+    }
+
+    const posts = await Post.find(filterQuery)
       .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    const totalPosts = await Post.countDocuments();
+    const totalPosts = await Post.countDocuments(filterQuery);
     const formatted = posts.map((p) => formatPostForUser(p, currentUserId));
 
     return res.status(200).json({
@@ -68,12 +85,12 @@ const createPost = async (req, res, next) => {
       imageUrl,
       likes: [],
       dislikes: [],
+      comments: [],
     });
 
-    const populated = await Post.findById(post._id).populate(
-      'author',
-      'name email avatar bio isOnline lastSeen role'
-    );
+    const populated = await Post.findById(post._id)
+      .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role');
 
     const formatted = formatPostForUser(populated, currentUserId);
 
@@ -81,11 +98,67 @@ const createPost = async (req, res, next) => {
     try {
       const { getIO } = require('../sockets/socketManager');
       getIO().emit('post:created', formatted);
-    } catch (e) {
-      // socket might be off in tests
-    }
+    } catch (e) {}
 
     return res.status(201).json({
+      success: true,
+      post: formatted,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/posts/:id - Edit an existing post (Author only)
+const updatePost = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const { id: postId } = req.params;
+    const { content, image } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Post content cannot be empty' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const isAuthor = String(post.author) === String(currentUserId);
+    const isSuper = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+
+    if (!isAuthor && !isSuper) {
+      return res.status(403).json({ message: 'Unauthorized to edit this post' });
+    }
+
+    post.content = content.trim();
+    post.isEdited = true;
+    post.editedAt = new Date();
+
+    if (image !== undefined) {
+      if (image && typeof image === 'string' && !image.startsWith('http')) {
+        post.imageUrl = await uploadFeedImage(image, 'shofi_chat_feed');
+      } else if (image === '') {
+        post.imageUrl = '';
+      }
+    }
+
+    await post.save();
+
+    const populated = await Post.findById(post._id)
+      .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role');
+
+    const formatted = formatPostForUser(populated, currentUserId);
+
+    // Broadcast edit in real-time
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().emit('post:updated', formatted);
+    } catch (e) {}
+
+    return res.status(200).json({
       success: true,
       post: formatted,
     });
@@ -108,23 +181,19 @@ const toggleLike = async (req, res, next) => {
     const hasLiked = post.likes.some((id) => String(id) === String(currentUserId));
 
     if (hasLiked) {
-      // Remove like
       post.likes = post.likes.filter((id) => String(id) !== String(currentUserId));
     } else {
-      // Add like and remove dislike if present
       post.likes.addToSet(currentUserId);
       post.dislikes = post.dislikes.filter((id) => String(id) !== String(currentUserId));
     }
 
     await post.save();
 
-    const populated = await Post.findById(post._id).populate(
-      'author',
-      'name email avatar bio isOnline lastSeen role'
-    );
+    const populated = await Post.findById(post._id)
+      .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role');
     const formatted = formatPostForUser(populated, currentUserId);
 
-    // Broadcast reaction update
     try {
       const { getIO } = require('../sockets/socketManager');
       getIO().emit('post:reacted', {
@@ -159,23 +228,19 @@ const toggleDislike = async (req, res, next) => {
     const hasDisliked = post.dislikes.some((id) => String(id) === String(currentUserId));
 
     if (hasDisliked) {
-      // Remove dislike
       post.dislikes = post.dislikes.filter((id) => String(id) !== String(currentUserId));
     } else {
-      // Add dislike and remove like if present
       post.dislikes.addToSet(currentUserId);
       post.likes = post.likes.filter((id) => String(id) !== String(currentUserId));
     }
 
     await post.save();
 
-    const populated = await Post.findById(post._id).populate(
-      'author',
-      'name email avatar bio isOnline lastSeen role'
-    );
+    const populated = await Post.findById(post._id)
+      .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role');
     const formatted = formatPostForUser(populated, currentUserId);
 
-    // Broadcast reaction update
     try {
       const { getIO } = require('../sockets/socketManager');
       getIO().emit('post:reacted', {
@@ -190,6 +255,102 @@ const toggleDislike = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       post: formatted,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/posts/:id/comments - Add a comment to a post
+const addComment = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const { id: postId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Comment content cannot be empty' });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    post.comments.push({
+      user: currentUserId,
+      content: content.trim(),
+    });
+
+    await post.save();
+
+    const populated = await Post.findById(post._id)
+      .populate('author', 'name email avatar bio isOnline lastSeen role')
+      .populate('comments.user', 'name email avatar role');
+
+    const formatted = formatPostForUser(populated, currentUserId);
+    const addedComment = formatted.comments[formatted.comments.length - 1];
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().emit('post:comment:added', {
+        postId: String(post._id),
+        comment: addedComment,
+        commentsCount: formatted.commentsCount,
+      });
+    } catch (e) {}
+
+    return res.status(201).json({
+      success: true,
+      post: formatted,
+      comment: addedComment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/posts/:id/comments/:commentId - Delete a comment
+const deleteComment = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const { id: postId, commentId } = req.params;
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    const isCommentAuthor = String(comment.user) === String(currentUserId);
+    const isPostAuthor = String(post.author) === String(currentUserId);
+    const isSuper = isSuperAdminEmail(req.user.email) || req.user.role === 'admin';
+
+    if (!isCommentAuthor && !isPostAuthor && !isSuper) {
+      return res.status(403).json({ message: 'Unauthorized to delete this comment' });
+    }
+
+    post.comments.pull({ _id: commentId });
+    await post.save();
+
+    try {
+      const { getIO } = require('../sockets/socketManager');
+      getIO().emit('post:comment:deleted', {
+        postId: String(post._id),
+        commentId: String(commentId),
+        commentsCount: post.comments.length,
+      });
+    } catch (e) {}
+
+    return res.status(200).json({
+      success: true,
+      message: 'Comment deleted successfully',
+      commentId,
+      commentsCount: post.comments.length,
     });
   } catch (error) {
     next(error);
@@ -234,7 +395,10 @@ const deletePost = async (req, res, next) => {
 module.exports = {
   getPosts,
   createPost,
+  updatePost,
   toggleLike,
   toggleDislike,
+  addComment,
+  deleteComment,
   deletePost,
 };
