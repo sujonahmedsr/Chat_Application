@@ -13,6 +13,7 @@ import {
   UserCheck,
   ShieldAlert,
   Settings,
+  Globe,
 } from 'lucide-react';
 import { User, Group } from '@/types';
 import { Avatar } from '../ui/Avatar';
@@ -47,6 +48,8 @@ interface SidebarProps {
   onOpenNotificationSetup?: () => void;
   pendingRequestsCount: number;
   isLoadingUsers: boolean;
+  onOpenFeed?: () => void;
+  isFeedActive?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -66,6 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenNotificationSetup,
   pendingRequestsCount,
   isLoadingUsers,
+  onOpenFeed,
+  isFeedActive = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'groups'>('chats');
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,6 +250,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Community News Feed Tab Switcher */}
+      {onOpenFeed && (
+        <div className="px-3 pt-3">
+          <button
+            onClick={onOpenFeed}
+            className={`w-full py-2.5 px-3 rounded-2xl flex items-center justify-between transition-all active:scale-[0.99] ${
+              isFeedActive
+                ? 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-950/30'
+                : 'bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`p-2 rounded-xl flex items-center justify-center transition-colors ${
+                  isFeedActive
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/50'
+                    : 'bg-neutral-800 text-emerald-400'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <span className="text-xs font-bold block leading-tight">Community Feed</span>
+                <span className="text-[10px] text-neutral-400 block mt-0.5">Public news & thoughts</span>
+              </div>
+            </div>
+            {isFeedActive && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Tabs: Direct Chats (Friends) vs Groups */}
       <div className="flex p-1.5 mx-3 mt-3 bg-neutral-900 rounded-xl border border-neutral-800">

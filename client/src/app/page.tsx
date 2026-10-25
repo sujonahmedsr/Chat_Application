@@ -23,6 +23,7 @@ import { AdminModal } from '@/components/admin/AdminModal';
 import { SettingsModal } from '@/components/chat/SettingsModal';
 import { NotificationModal } from '@/components/chat/NotificationModal';
 import { LandingPage } from '@/components/landing/LandingPage';
+import { FeedArea } from '@/components/feed/FeedArea';
 import {
   encryptMessage,
   decryptMessage,
@@ -1205,44 +1206,74 @@ export default function ChatDashboard() {
           onOpenNotificationSetup={() => setShowNotificationModal(true)}
           pendingRequestsCount={pendingRequestsCount}
           isLoadingUsers={isLoadingUsers}
+          onOpenFeed={() => {
+            setSelectedUser(null);
+            setSelectedGroup(null);
+            setIsMobileChatOpen(true);
+          }}
+          isFeedActive={!selectedUser && !selectedGroup}
         />
       </div>
 
-      {/* Main Chat Area */}
+      {/* Main Right Area: ChatArea when conversation active, otherwise FeedArea */}
       <div className={`${!isMobileChatOpen ? 'hidden md:flex' : 'flex'} flex-1 h-full min-w-0`}>
-        <ChatArea
-          selectedUser={selectedUser}
-          selectedGroup={selectedGroup}
-          currentUser={currentUser}
-          messages={messages}
-          availableFriends={users}
-          isLoadingMessages={isLoadingMessages}
-          isRecipientTyping={isRecipientTyping}
-          groupTypingUser={groupTypingUser}
-          onSendMessage={handleSendMessage}
-          onTypingStart={handleTypingStart}
-          onTypingStop={handleTypingStop}
-          onStartCall={(target, type) => startCall(target, type)}
-          onStartGroupCall={(groupId, groupName, targetMemberIds) =>
-            startGroupCall(groupId, groupName, targetMemberIds)
-          }
-          onDeleteMessage={handleDeleteMessage}
-          onReactMessage={handleReactMessage}
-          onEditMessage={handleEditMessage}
-          onClearHistory={handleClearHistory}
-          onClearGroupMessages={handleClearGroupMessages}
-          onDeleteGroup={handleDeleteGroup}
-          onGroupUpdated={(updatedGroup) => {
-            setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-            setSelectedGroup(updatedGroup);
-          }}
-          onBack={() => setIsMobileChatOpen(false)}
-          onFriendUpdated={() => {
-            fetchFriends();
-            setSelectedUser(null);
-            setMessages([]);
-          }}
-        />
+        {selectedUser || selectedGroup ? (
+          <ChatArea
+            selectedUser={selectedUser}
+            selectedGroup={selectedGroup}
+            currentUser={currentUser}
+            messages={messages}
+            availableFriends={users}
+            isLoadingMessages={isLoadingMessages}
+            isRecipientTyping={isRecipientTyping}
+            groupTypingUser={groupTypingUser}
+            onSendMessage={handleSendMessage}
+            onTypingStart={handleTypingStart}
+            onTypingStop={handleTypingStop}
+            onStartCall={(target, type) => startCall(target, type)}
+            onStartGroupCall={(groupId, groupName, targetMemberIds) =>
+              startGroupCall(groupId, groupName, targetMemberIds)
+            }
+            onDeleteMessage={handleDeleteMessage}
+            onReactMessage={handleReactMessage}
+            onEditMessage={handleEditMessage}
+            onClearHistory={handleClearHistory}
+            onClearGroupMessages={handleClearGroupMessages}
+            onDeleteGroup={handleDeleteGroup}
+            onGroupUpdated={(updatedGroup) => {
+              setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+              setSelectedGroup(updatedGroup);
+            }}
+            onBack={() => setIsMobileChatOpen(false)}
+            onBackToFeed={() => {
+              setSelectedUser(null);
+              setSelectedGroup(null);
+              setIsMobileChatOpen(false);
+            }}
+            onFriendUpdated={() => {
+              fetchFriends();
+              setSelectedUser(null);
+              setMessages([]);
+            }}
+          />
+        ) : (
+          <FeedArea
+            currentUser={currentUser}
+            onStartChat={(targetUser) => {
+              handleSelectUser(targetUser);
+              setIsMobileChatOpen(true);
+            }}
+            onAddFriend={async (targetUserId) => {
+              try {
+                await apiRequest(`/friends/request/${targetUserId}`, { method: 'POST' });
+                fetchFriends();
+              } catch (err) {
+                console.error('Failed to send friend request:', err);
+              }
+            }}
+            onOpenSidebar={() => setIsMobileChatOpen(false)}
+          />
+        )}
       </div>
 
       {/* 1-to-1 Incoming Call Popup - strictly only when ringing */}

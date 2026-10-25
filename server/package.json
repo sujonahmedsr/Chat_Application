@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "build": "node -e \"require('./src/routes/groupRoutes'); require('./src/routes/authRoutes'); require('./src/routes/friendRoutes'); require('./src/routes/messageRoutes'); require('./src/routes/userRoutes'); require('./src/routes/callRoutes'); require('./src/routes/adminRoutes'); console.log('Server build validation passed.'); process.exit(0);\"",
+    "build": "node -e \"require('./src/routes/groupRoutes'); require('./src/routes/authRoutes'); require('./src/routes/friendRoutes'); require('./src/routes/messageRoutes'); require('./src/routes/userRoutes'); require('./src/routes/callRoutes'); require('./src/routes/adminRoutes'); require('./src/routes/postRoutes'); console.log('Server build validation passed.'); process.exit(0);\"",
     "test": "node --test test/auth.test.js test/messaging.test.js test/group.test.js test/socket.test.js",
     "benchmark": "node test/performance.benchmark.js"
   },

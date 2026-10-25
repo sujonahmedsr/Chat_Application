@@ -21,6 +21,7 @@ import {
   Reply,
   Crown,
   LogOut,
+  Globe,
 } from 'lucide-react';
 import { User, Group, Message } from '@/types';
 import { apiRequest } from '@/lib/api';
@@ -52,6 +53,7 @@ interface ChatAreaProps {
   onDeleteGroup?: (groupId: string) => void;
   onGroupUpdated?: (updatedGroup: Group) => void;
   onBack?: () => void;
+  onBackToFeed?: () => void;
   onFriendUpdated?: () => void;
 }
 
@@ -90,6 +92,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onDeleteGroup,
   onGroupUpdated,
   onBack,
+  onBackToFeed,
   onFriendUpdated,
 }) => {
   const [chatTheme, setChatTheme] = useState('emerald');
@@ -603,6 +606,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <span className="hidden sm:inline">Video</span>
               </button>
             </>
+          )}
+
+          {/* Back to Community Feed Button */}
+          {onBackToFeed && (
+            <button
+              onClick={onBackToFeed}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700/60 transition-all text-xs font-medium active:scale-95 shadow-sm"
+              title="Return to Community Feed"
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Feed</span>
+            </button>
           )}
 
           {/* Options Dropdown */}

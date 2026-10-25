@@ -52,6 +52,33 @@ const uploadImage = async (fileStr, folder = 'shofi_chat_avatars') => {
   return fileStr;
 };
 
+const uploadFeedImage = async (fileStr, folder = 'shofi_chat_feed') => {
+  if (!fileStr) return '';
+
+  if (fileStr.startsWith('http://') || fileStr.startsWith('https://')) {
+    return fileStr;
+  }
+
+  if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
+    try {
+      const uploadResponse = await cloudinary.uploader.upload(fileStr, {
+        folder,
+        resource_type: 'image',
+        transformation: [
+          { quality: 'auto:good', fetch_format: 'auto' },
+        ],
+      });
+      return uploadResponse.secure_url;
+    } catch (err) {
+      console.error('[Cloudinary Feed Upload Error]', err);
+      return fileStr;
+    }
+  }
+
+  return fileStr;
+};
+
 module.exports = {
   uploadImage,
+  uploadFeedImage,
 };

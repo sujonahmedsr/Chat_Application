@@ -16,6 +16,8 @@ export interface User {
   isBlocked?: boolean;
   isBlockedByMe?: boolean;
   hasBlockedMe?: boolean;
+  isFriend?: boolean;
+  friends?: (string | User)[];
   settings?: {
     saveChatHistory?: boolean;
     chatRetentionDays?: number;
@@ -86,4 +88,17 @@ export interface IncomingCallData {
   callerAvatar?: string;
   callType: 'audio' | 'video';
   offer: RTCSessionDescriptionInit;
+}
+
+export interface Post {
+  id: string;
+  author: User;
+  content: string;
+  imageUrl?: string;
+  likesCount: number;
+  dislikesCount: number;
+  isLiked?: boolean;
+  isDisliked?: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
