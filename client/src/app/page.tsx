@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSocket } from '@/context/SocketContext';
 import { useWebRTC } from '@/hooks/useWebRTC';
@@ -62,6 +62,11 @@ export default function ChatDashboard() {
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [activeToast, setActiveToast] = useState<ToastNotificationData | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Refs to eliminate stale closures in real-time socket handlers
   const selectedUserRef = useRef<User | null>(null);
@@ -1172,11 +1177,18 @@ export default function ChatDashboard() {
     };
   }, [socket, fetchFriends, fetchGroups, fetchPendingRequestsCount, logout]);
 
-  if (authLoading) {
+  const hasStoredToken =
+    typeof window !== 'undefined' ? Boolean(localStorage.getItem('chat_token')) : false;
+
+  if (!isMounted || authLoading || (!currentUser && hasStoredToken)) {
     return (
-      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3">
-        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-        <span className="text-sm font-medium">Initializing Shofi Chat...</span>
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-neutral-950 text-neutral-400 gap-3 select-none">
+        <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-950/40 animate-pulse">
+          <MessageSquare className="w-6 h-6" />
+        </div>
+        <span className="text-xs text-neutral-400 font-medium tracking-wide">
+          Connecting to Shofi Chat...
+        </span>
       </div>
     );
   }

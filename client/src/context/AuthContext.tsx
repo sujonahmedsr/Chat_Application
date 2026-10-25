@@ -54,18 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('chat_token');
-      const storedUser = localStorage.getItem('chat_user');
-      // Only show initializing loader if token exists but user profile is not cached yet
-      if (storedToken && !storedUser) {
-        return true;
-      }
-      return false;
-    }
-    return false;
-  });
+  const [loading, setLoading] = useState<boolean>(true);
 
   const refreshUser = async () => {
     try {
@@ -135,6 +124,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    try {
+      const storedToken = localStorage.getItem('chat_token');
+      const storedUser = localStorage.getItem('chat_user');
+      if (storedToken && storedUser) {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+        setLoading(false);
+      } else if (!storedToken) {
+        setLoading(false);
+      }
+    } catch (e) {}
+
     refreshUser();
   }, []);
 
