@@ -74,6 +74,12 @@ const postSchema = new mongoose.Schema(
       },
     ],
     comments: [commentSchema],
+    privacy: {
+      type: String,
+      enum: ['public', 'private'],
+      default: 'public',
+      index: true,
+    },
     isEdited: {
       type: Boolean,
       default: false,

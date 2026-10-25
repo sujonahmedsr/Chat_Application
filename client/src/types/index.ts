@@ -113,6 +113,7 @@ export interface Post {
   isDisliked?: boolean;
   isEdited?: boolean;
   editedAt?: string;
+  privacy?: 'public' | 'private';
   createdAt: string;
   updatedAt?: string;
 }

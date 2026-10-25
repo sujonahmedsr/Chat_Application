@@ -25,6 +25,7 @@ const formatPostForUser = (post, currentUserId) => {
     commentsCount: commentsArray.length,
     isLiked: likesArray.some((id) => String(id) === uidStr),
     isDisliked: dislikesArray.some((id) => String(id) === uidStr),
+    privacy: json.privacy || 'public',
     comments: commentsArray.map((c) => {
       const cJson = c.toJSON ? c.toJSON() : { ...c };
       return {
@@ -35,7 +36,7 @@ const formatPostForUser = (post, currentUserId) => {
   };
 };
 
-// GET /api/posts - Fetch public news feed or filtered "My Posts"
+// GET /api/posts - Fetch public news feed or filtered "My Posts" (Strict Privacy Enforced)
 const getPosts = async (req, res, next) => {
   try {
     const currentUserId = req.user ? req.user._id : null;
@@ -57,14 +58,27 @@ const getPosts = async (req, res, next) => {
       filterQuery.tags = tagQuery;
     }
 
-    const posts = await Post.find(filterQuery)
+    // PRIVACY ENFORCEMENT: Private posts can ONLY be seen by their author
+    const privacyCondition = {
+      $or: [
+        { privacy: 'public' },
+        { privacy: { $exists: false } },
+        ...(currentUserId ? [{ author: currentUserId }] : []),
+      ],
+    };
+
+    const finalQuery = {
+      $and: [filterQuery, privacyCondition],
+    };
+
+    const posts = await Post.find(finalQuery)
       .populate('author', 'name email avatar bio isOnline lastSeen role')
       .populate('comments.user', 'name email avatar role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    const totalPosts = await Post.countDocuments(filterQuery);
+    const totalPosts = await Post.countDocuments(finalQuery);
     const formatted = posts.map((p) => formatPostForUser(p, currentUserId));
 
     return res.status(200).json({
@@ -78,11 +92,36 @@ const getPosts = async (req, res, next) => {
   }
 };
 
-// POST /api/posts - Create a new feed post (Blog / Facebook style)
+// GET /api/posts/tags/trending - Real hashtags aggregated from actual posts (NO dummy data)
+const getTrendingTags = async (req, res, next) => {
+  try {
+    const tags = await Post.aggregate([
+      { $match: { tags: { $exists: true, $ne: [] }, privacy: { $ne: 'private' } } },
+      { $unwind: '$tags' },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    const formatted = tags.map((t) => ({
+      tag: t._id,
+      count: t.count,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      tags: formatted,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/posts - Create a new feed post (Blog / Facebook style with Privacy)
 const createPost = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
-    const { title, content, image, tags } = req.body;
+    const { title, content, image, tags, privacy } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Post content cannot be empty' });
@@ -92,6 +131,8 @@ const createPost = async (req, res, next) => {
     if (image && typeof image === 'string') {
       imageUrl = await uploadFeedImage(image, 'shofi_chat_feed');
     }
+
+    const postPrivacy = privacy === 'private' ? 'private' : 'public';
 
     // Combine explicit tags with extracted hashtags from content and title
     const contentTags = extractHashtags(`${title || ''} ${content}`);
@@ -106,6 +147,7 @@ const createPost = async (req, res, next) => {
       content: content.trim(),
       tags: mergedTags,
       imageUrl,
+      privacy: postPrivacy,
       likes: [],
       dislikes: [],
       comments: [],
@@ -117,11 +159,13 @@ const createPost = async (req, res, next) => {
 
     const formatted = formatPostForUser(populated, currentUserId);
 
-    // Broadcast new post in real-time to all connected users
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:created', formatted);
-    } catch (e) {}
+    // Only broadcast to everyone if public! Private posts stay private to author
+    if (postPrivacy === 'public') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:created', formatted);
+      } catch (e) {}
+    }
 
     return res.status(201).json({
       success: true,
@@ -137,7 +181,7 @@ const updatePost = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
     const { id: postId } = req.params;
-    const { title, content, image, tags } = req.body;
+    const { title, content, image, tags, privacy } = req.body;
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Post content cannot be empty' });
@@ -158,6 +202,10 @@ const updatePost = async (req, res, next) => {
     post.content = content.trim();
     if (title !== undefined) {
       post.title = title ? title.trim() : '';
+    }
+
+    if (privacy !== undefined) {
+      post.privacy = privacy === 'private' ? 'private' : 'public';
     }
 
     const contentTags = extractHashtags(`${post.title} ${post.content}`);
@@ -185,11 +233,13 @@ const updatePost = async (req, res, next) => {
 
     const formatted = formatPostForUser(populated, currentUserId);
 
-    // Broadcast edit in real-time
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:updated', formatted);
-    } catch (e) {}
+    // Broadcast edit in real-time if public
+    if (formatted.privacy === 'public') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:updated', formatted);
+      } catch (e) {}
+    }
 
     return res.status(200).json({
       success: true,
@@ -227,16 +277,18 @@ const toggleLike = async (req, res, next) => {
       .populate('comments.user', 'name email avatar role');
     const formatted = formatPostForUser(populated, currentUserId);
 
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:reacted', {
-        postId: String(post._id),
-        likesCount: post.likes.length,
-        dislikesCount: post.dislikes.length,
-        action: hasLiked ? 'unliked' : 'liked',
-        userId: String(currentUserId),
-      });
-    } catch (e) {}
+    if (post.privacy !== 'private') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:reacted', {
+          postId: String(post._id),
+          likesCount: post.likes.length,
+          dislikesCount: post.dislikes.length,
+          action: hasLiked ? 'unliked' : 'liked',
+          userId: String(currentUserId),
+        });
+      } catch (e) {}
+    }
 
     return res.status(200).json({
       success: true,
@@ -274,16 +326,18 @@ const toggleDislike = async (req, res, next) => {
       .populate('comments.user', 'name email avatar role');
     const formatted = formatPostForUser(populated, currentUserId);
 
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:reacted', {
-        postId: String(post._id),
-        likesCount: post.likes.length,
-        dislikesCount: post.dislikes.length,
-        action: hasDisliked ? 'undisliked' : 'disliked',
-        userId: String(currentUserId),
-      });
-    } catch (e) {}
+    if (post.privacy !== 'private') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:reacted', {
+          postId: String(post._id),
+          likesCount: post.likes.length,
+          dislikesCount: post.dislikes.length,
+          action: hasDisliked ? 'undisliked' : 'disliked',
+          userId: String(currentUserId),
+        });
+      } catch (e) {}
+    }
 
     return res.status(200).json({
       success: true,
@@ -324,14 +378,16 @@ const addComment = async (req, res, next) => {
     const formatted = formatPostForUser(populated, currentUserId);
     const addedComment = formatted.comments[formatted.comments.length - 1];
 
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:comment:added', {
-        postId: String(post._id),
-        comment: addedComment,
-        commentsCount: formatted.commentsCount,
-      });
-    } catch (e) {}
+    if (post.privacy !== 'private') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:comment:added', {
+          postId: String(post._id),
+          comment: addedComment,
+          commentsCount: formatted.commentsCount,
+        });
+      } catch (e) {}
+    }
 
     return res.status(201).json({
       success: true,
@@ -370,14 +426,16 @@ const deleteComment = async (req, res, next) => {
     post.comments.pull({ _id: commentId });
     await post.save();
 
-    try {
-      const { getIO } = require('../sockets/socketManager');
-      getIO().emit('post:comment:deleted', {
-        postId: String(post._id),
-        commentId: String(commentId),
-        commentsCount: post.comments.length,
-      });
-    } catch (e) {}
+    if (post.privacy !== 'private') {
+      try {
+        const { getIO } = require('../sockets/socketManager');
+        getIO().emit('post:comment:deleted', {
+          postId: String(post._id),
+          commentId: String(commentId),
+          commentsCount: post.comments.length,
+        });
+      } catch (e) {}
+    }
 
     return res.status(200).json({
       success: true,
@@ -427,6 +485,7 @@ const deletePost = async (req, res, next) => {
 
 module.exports = {
   getPosts,
+  getTrendingTags,
   createPost,
   updatePost,
   toggleLike,

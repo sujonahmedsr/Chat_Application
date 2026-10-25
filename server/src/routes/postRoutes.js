@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const {
   getPosts,
+  getTrendingTags,
   createPost,
   updatePost,
   toggleLike,
@@ -15,6 +16,7 @@ const {
 // All post routes require authentication
 router.use(authenticate);
 
+router.get('/tags/trending', getTrendingTags);
 router.get('/', getPosts);
 router.post('/', createPost);
 router.put('/:id', updatePost);

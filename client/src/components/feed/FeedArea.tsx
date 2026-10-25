@@ -597,6 +597,7 @@ export const FeedArea: React.FC<FeedAreaProps> = ({
           <div className="hidden lg:block w-80 flex-shrink-0 sticky top-2 self-start">
             <FeedWidgets
               onlineFriends={onlineFriends}
+              posts={posts}
               activeTag={activeTag}
               onSelectTag={(tag) => setActiveTag(tag || null)}
               onStartChat={onStartChat}

@@ -12,10 +12,12 @@ import {
   ExternalLink,
   Globe,
   Tag,
+  Lock,
 } from 'lucide-react';
 import { Post, User } from '@/types';
 import { Avatar } from '../ui/Avatar';
 import { CommentsSection } from './CommentsSection';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const SUPER_ADMINS = ['shofiqul.sujon2201@gmail.com'];
 
@@ -52,6 +54,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const author = post.author;
   const authorId = author ? String(author.id || (author as any)._id) : '';
@@ -185,7 +188,20 @@ export const PostCard: React.FC<PostCardProps> = ({
                 </span>
               )}
               <span>•</span>
-              <Globe className="w-3 h-3 text-neutral-400" />
+              {post.privacy === 'private' ? (
+                <span
+                  className="inline-flex items-center gap-1 text-amber-400 font-medium"
+                  title="Only you can see this post (Private)"
+                >
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>Only me</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-neutral-400" title="Public post">
+                  <Globe className="w-3 h-3 text-neutral-400" />
+                  <span>Public</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -235,7 +251,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    onDelete(post.id);
+                    setShowDeleteModal(true);
                   }}
                   className="w-full px-3 py-2 text-left text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors"
                 >
@@ -288,7 +304,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       {post.imageUrl && (
         <div
           onClick={() => onOpenImageLightbox(post.imageUrl!)}
-          className={`relative mb-3.5 rounded-2xl overflow-hidden border cursor-pointer aspect-square w-full max-w-lg mx-auto ${
+          className={`relative mb-3.5 rounded-2xl overflow-hidden border cursor-pointer aspect-square w-full mx-auto ${
             isDarkMode
               ? 'bg-neutral-950 border-neutral-800'
               : 'bg-slate-100 border-slate-200'
@@ -399,6 +415,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           isDarkMode={isDarkMode}
         />
       )}
+
+      {/* Delete Confirmation Popup Modal */}
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={() => onDelete(post.id)}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };
