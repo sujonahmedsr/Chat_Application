@@ -41,7 +41,7 @@ app.use(
       if (isAllowed || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      return callback(null, true); // Fallback: allow communication for legitimate clients
+      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
